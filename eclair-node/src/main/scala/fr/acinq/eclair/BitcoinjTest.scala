@@ -1,0 +1,41 @@
+/*
+ * Copyright 2019 ACINQ SAS
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package fr.acinq.eclair
+
+import fr.acinq.bitcoin.{Block, Transaction}
+import fr.acinq.eclair.blockchain.bitcoinj.TxBroadcaster
+
+import scala.io.StdIn
+import scala.util.{Failure, Success}
+
+object BitcoinjTest extends App {
+
+  import scala.concurrent.ExecutionContext.Implicits.global
+
+  val broadcaster = new TxBroadcaster(Block.TestnetGenesisBlock.hash)
+
+  while (true) {
+    println(s"enter tx to publish:")
+    val hex = StdIn.readLine()
+    val tx = Transaction.read(hex)
+    broadcaster.broadcast(tx) onComplete {
+      case Success(r) => println(s"success: $r")
+      case Failure(t) => t.printStackTrace()
+    }
+  }
+
+}

@@ -20,15 +20,18 @@ import akka.actor.{ActorRef, ActorSystem}
 import akka.pattern.ask
 import fr.acinq.bitcoin.{ByteVector32, Satoshi, Script, Transaction, TxOut}
 import fr.acinq.eclair.addressToPublicKeyScript
-import fr.acinq.eclair.blockchain.electrum.ElectrumClient.BroadcastTransaction
+import fr.acinq.eclair.blockchain.bitcoinj.TxBroadcaster
 import fr.acinq.eclair.blockchain.electrum.ElectrumWallet._
 import fr.acinq.eclair.blockchain.{EclairWallet, MakeFundingTxResponse}
 import grizzled.slf4j.Logging
 import scodec.bits.ByteVector
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success}
 
 class ElectrumEclairWallet(val wallet: ActorRef, chainHash: ByteVector32)(implicit system: ActorSystem, ec: ExecutionContext, timeout: akka.util.Timeout) extends EclairWallet with Logging {
+
+  val bitcoinjBroadcaster = new TxBroadcaster(chainHash)
 
   override def getBalance = (wallet ? GetBalance).mapTo[GetBalanceResponse].map(balance => balance.confirmed + balance.unconfirmed)
 
@@ -44,26 +47,20 @@ class ElectrumEclairWallet(val wallet: ActorRef, chainHash: ByteVector32)(implic
     })
   }
 
-  override def commit(tx: Transaction): Future[Boolean] =
-    (wallet ? BroadcastTransaction(tx)) flatMap {
-      case ElectrumClient.BroadcastTransactionResponse(tx, None) =>
-        //tx broadcast successfully: commit tx
+  override def commit(tx: Transaction): Future[Boolean] = {
+    val f = bitcoinjBroadcaster.broadcast(tx)
+    f onComplete {
+      case Success(true) =>
+        // tx has been successfully broadcast, we asynchronously commit the tx in Electrum Wallet, but we can already
+        // return the result
         wallet ? CommitTransaction(tx)
-      case ElectrumClient.BroadcastTransactionResponse(tx, Some(error)) if error.message.contains("transaction already in block chain") =>
-        // tx was already in the blockchain, that's weird but it is OK
-        wallet ? CommitTransaction(tx)
-      case ElectrumClient.BroadcastTransactionResponse(_, Some(error)) =>
-        //tx broadcast failed: cancel tx
-        logger.error(s"cannot broadcast tx ${tx.txid}: $error")
+      case Success(false) =>
+        // tx broadcast failed, we asynchronously cancel the tx in Electrum Wallet, but we can already return the result
         wallet ? CancelTransaction(tx)
-      case ElectrumClient.ServerError(ElectrumClient.BroadcastTransaction(tx), error) =>
-        //tx broadcast failed: cancel tx
-        logger.error(s"cannot broadcast tx ${tx.txid}: $error")
-        wallet ? CancelTransaction(tx)
-    } map {
-      case CommitTransactionResponse(_) => true
-      case CancelTransactionResponse(_) => false
+      case Failure(t) => logger.error(s"cannot broadcast tx ${tx.txid}: ", t)
     }
+    f
+  }
 
   def sendPayment(amount: Satoshi, address: String, feeRatePerKw: Long): Future[String] = {
     val publicKeyScript = Script.write(addressToPublicKeyScript(address, chainHash))
