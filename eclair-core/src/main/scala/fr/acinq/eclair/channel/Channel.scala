@@ -239,7 +239,16 @@ class Channel(val nodeParams: NodeParams, val wallet: EclairWallet, remoteNodeId
                   case Success(true) =>
                     log.warning(s"funding tx has been double spent! cancelling channel fundingTxid=${fundingTx.txid} fundingTx=$fundingTx")
                     self ! BITCOIN_FUNDING_PUBLISH_FAILED
-                  case Success(false) => ()
+                  case Success(false) =>
+                    log.info(s"re-publishing funding tx txid=${fundingTx.txid}")
+                    wallet.commit(fundingTx).onComplete {
+                      case Success(true) =>
+                        log.info(s"successfully re-published funding tx txid=${fundingTx.txid}")
+                      case Success(false) =>
+                        log.warning(s"couldn't re-published funding tx txid=${fundingTx.txid}")
+                      case Failure(t) =>
+                        log.error(t, s"error while re-publishing funding tx: ") // tx may still have been published, can't fail-fast
+                    }
                   case Failure(t) => log.error(t, s"error while testing status of funding tx fundingTxid=${fundingTx.txid}: ")
                 }
               case _ => ()
