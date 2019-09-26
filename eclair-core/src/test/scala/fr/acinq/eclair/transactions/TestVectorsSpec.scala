@@ -17,7 +17,7 @@
 package fr.acinq.eclair.transactions
 
 import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
-import fr.acinq.bitcoin.{ByteVector32, Crypto, Satoshi, Script, ScriptFlags, Transaction}
+import fr.acinq.bitcoin.{ByteVector32, Crypto, Script, ScriptFlags, Transaction}
 import fr.acinq.eclair.channel.Helpers.Funding
 import fr.acinq.eclair.crypto.Generators
 import fr.acinq.eclair.transactions.Transactions.{HtlcSuccessTx, HtlcTimeoutTx, TransactionWithInputInfo}
@@ -212,15 +212,17 @@ class TestVectorsSpec extends FunSuite with Logging {
       }
     })
 
+    val outputs = Transactions.makeCommitTxOutputs(
+      true, Local.dustLimit, Local.revocation_pubkey, Local.toSelfDelay,
+      Local.delayed_payment_privkey.publicKey, Remote.payment_privkey.publicKey,
+      Local.payment_privkey.publicKey, Remote.payment_privkey.publicKey, // note: we have payment_key = htlc_key
+      spec)
+
     {
       val tx = Transactions.makeCommitTx(
         commitmentInput,
         Local.commitTxNumber, Local.payment_basepoint, Remote.payment_basepoint,
-        true, Local.dustLimit,
-        Local.revocation_pubkey, Local.toSelfDelay,
-        Local.delayed_payment_privkey.publicKey, Remote.payment_privkey.publicKey,
-        Local.payment_privkey.publicKey, Remote.payment_privkey.publicKey, // note: we have payment_key = htlc_key
-        spec)
+        true, outputs)
 
       val local_sig = Transactions.sign(tx, Local.funding_privkey)
       logger.info(s"# local_signature = ${local_sig.dropRight(1).toHex}")
