@@ -18,12 +18,14 @@ package fr.acinq.eclair
 
 import java.io.File
 
-import akka.actor.{ActorSystem, Props, SupervisorStrategy}
+import akka.actor.Actor.Receive
+import akka.actor.{Actor, ActorSystem, Props, SupervisorStrategy}
 import akka.io.IO
 import com.typesafe.config.Config
-import fr.acinq.eclair.api.Service
+import fr.acinq.eclair.api.{Service, ServiceActor}
 import grizzled.slf4j.Logging
 import spray.can.Http
+import spray.routing.{HttpService, HttpServiceActor, HttpServiceBase, RoutingSettings}
 
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success}
@@ -68,7 +70,7 @@ object Boot extends App with Logging {
         case "" => throw EmptyAPIPasswordException
         case valid => valid
       }
-      val serviceActor = system.actorOf(SimpleSupervisor.props(Props(new Service(apiPassword, new EclairImpl(kit))), "api-service", SupervisorStrategy.Restart))
+      val serviceActor = system.actorOf(SimpleSupervisor.props(Props(new ServiceActor(apiPassword, new EclairImpl(kit))), "api-service", SupervisorStrategy.Restart))
       IO(Http) ! Http.Bind(serviceActor, config.getString("api.binding-ip"), config.getInt("api.port"))
     } else {
       logger.info("json API disabled")
