@@ -35,27 +35,20 @@ class ElectrumWalletBasicSpec extends fixture.FunSuite with Logging {
   import ElectrumWallet._
   import ElectrumWalletBasicSpec._
 
-  val p2shStrategy = new BIP49KeyStore
-  val nativeSegwitStrategy = new BIP84KeyStore
-
   case class FixtureParam(state: Data)
 
   override def withFixture(test: OneArgTest): Outcome = {
-    val walletType:WalletType = test.tags.contains("bech32") match {
-      case true => NATIVE_SEGWIT
-      case false => P2SH_SEGWIT
+    val master = DeterministicWallet.generate(ByteVector32(ByteVector.fill(32)(1)))
+    val blockchain = Blockchain.fromCheckpoints(Block.RegtestGenesisBlock.hash, CheckPoint.load(Block.RegtestGenesisBlock.hash))
+
+    val (walletType: ElectrumWallet.WalletType, keyStore: KeyStore) = test.tags.contains("bech32") match {
+      case true => (NATIVE_SEGWIT, new BIP49KeyStore(master, blockchain.chainHash))
+      case false => (P2SH_SEGWIT, new BIP84KeyStore(master, blockchain.chainHash))
     }
 
     val params = ElectrumWallet.WalletParameters(walletType, Block.RegtestGenesisBlock.hash, new SqliteWalletDb(DriverManager.getConnection("jdbc:sqlite::memory:")))
-
-    val master = DeterministicWallet.generate(ByteVector32(ByteVector.fill(32)(1)))
-    val accountMaster = accountKey(master, rootPath(walletType, Block.RegtestGenesisBlock.hash))
-    val changeMaster = changeKey(master, rootPath(walletType, Block.RegtestGenesisBlock.hash))
-    val firstAccountKeys = (0 until 10).map(i => derivePrivateKey(accountMaster, i)).toVector
-    val firstChangeKeys = (0 until 10).map(i => derivePrivateKey(changeMaster, i)).toVector
-
-    val state = Data(params, Blockchain.fromCheckpoints(Block.RegtestGenesisBlock.hash, CheckPoint.load(Block.RegtestGenesisBlock.hash)), firstAccountKeys, firstChangeKeys)
-    val state1 = state.copy(status = (firstAccountKeys ++ firstChangeKeys).map(key => computeScriptHashFromScriptPubKey(state.strategy.computePublicKeyScript(key.publicKey)) -> "").toMap)
+    val state = Data.createNew(keyStore, blockchain, params)
+    val state1 = state.copy(status = (state.accountKeys ++ state.changeKeys).map(key => computeScriptHashFromScriptPubKey(keyStore.computePublicKeyScript(key.publicKey)) -> "").toMap)
 
     withFixture(test.toNoArgTest(FixtureParam(state1)))
   }
@@ -66,8 +59,8 @@ class ElectrumWalletBasicSpec extends fixture.FunSuite with Logging {
   val minimumFee = 2000 sat
 
   def addFunds(data: Data, key: ExtendedPrivateKey, amount: Satoshi): Data = {
-    val tx = Transaction(version = 1, txIn = Nil, txOut = TxOut(amount, data.strategy.computePublicKeyScript(key.publicKey)) :: Nil, lockTime = 0)
-    val scriptHash = ElectrumWallet.computeScriptHashFromScriptPubKey(data.strategy.computePublicKeyScript(key.publicKey))
+    val tx = Transaction(version = 1, txIn = Nil, txOut = TxOut(amount, data.keyStore.computePublicKeyScript(key.publicKey)) :: Nil, lockTime = 0)
+    val scriptHash = ElectrumWallet.computeScriptHashFromScriptPubKey(data.keyStore.computePublicKeyScript(key.publicKey))
     val scriptHashHistory = data.history.getOrElse(scriptHash, List.empty[ElectrumClient.TransactionHistoryItem])
     data.copy(
       history = data.history.updated(scriptHash, ElectrumClient.TransactionHistoryItem(100, tx.txid) :: scriptHashHistory),
@@ -76,8 +69,8 @@ class ElectrumWalletBasicSpec extends fixture.FunSuite with Logging {
   }
 
   def addFunds(data: Data, keyamount: (ExtendedPrivateKey, Satoshi)): Data = {
-    val tx = Transaction(version = 1, txIn = Nil, txOut = TxOut(keyamount._2, data.strategy.computePublicKeyScript(keyamount._1.publicKey)) :: Nil, lockTime = 0)
-    val scriptHash = ElectrumWallet.computeScriptHashFromScriptPubKey(data.strategy.computePublicKeyScript(keyamount._1.publicKey))
+    val tx = Transaction(version = 1, txIn = Nil, txOut = TxOut(keyamount._2, data.keyStore.computePublicKeyScript(keyamount._1.publicKey)) :: Nil, lockTime = 0)
+    val scriptHash = ElectrumWallet.computeScriptHashFromScriptPubKey(data.keyStore.computePublicKeyScript(keyamount._1.publicKey))
     val scriptHashHistory = data.history.getOrElse(scriptHash, List.empty[ElectrumClient.TransactionHistoryItem])
     data.copy(
       history = data.history.updated(scriptHash, ElectrumClient.TransactionHistoryItem(100, tx.txid) :: scriptHashHistory),
@@ -86,50 +79,6 @@ class ElectrumWalletBasicSpec extends fixture.FunSuite with Logging {
   }
 
   def addFunds(data: Data, keyamounts: Seq[(ExtendedPrivateKey, Satoshi)]): Data = keyamounts.foldLeft(data)(addFunds)
-
-  test("compute addresses") { f =>
-    val priv = PrivateKey.fromBase58("cRumXueoZHjhGXrZWeFoEBkeDHu2m8dW5qtFBCqSAt4LDR2Hnd8Q", Base58.Prefix.SecretKeyTestnet)._1
-    assert(Base58Check.encode(Base58.Prefix.PubkeyAddressTestnet, priv.publicKey.hash160) == "ms93boMGZZjvjciujPJgDAqeR86EKBf9MC")
-    assert(p2shStrategy.computeAddress(priv, Block.RegtestGenesisBlock.hash) == "2MscvqgGXMTYJNAY3owdUtgWJaxPUjH38Cx")
-  }
-
-  test("derive bip84 keys", Tag("bech32")) { f =>
-    val seed = MnemonicCode.toSeed("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about", passphrase = "")
-    val master = DeterministicWallet.generate(seed)
-    val (accountZpub, _) = nativeSegwitStrategy.computeXPub(master, Block.LivenetGenesisBlock.hash)
-    assert(accountZpub == "zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs") // m/84'/0'/0'
-
-    val firstReceivingKey = DeterministicWallet.derivePrivateKey(accountKey(master, rootPath(f.state.walletType, Block.LivenetGenesisBlock.hash)), 0)
-    assert(firstReceivingKey.publicKey.value == hex"0330d54fd0dd420a6e5f8d3624f5f3482cae350f79d5f0753bf5beef9c2d91af3c")
-  }
-
-  test("compute bech32 addresses", Tag("bech32")) { f =>
-    val seed = MnemonicCode.toSeed("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about", passphrase = "")
-    val master = DeterministicWallet.generate(seed)
-    val firstReceivingKey = DeterministicWallet.derivePrivateKey(accountKey(master, rootPath(f.state.walletType, Block.LivenetGenesisBlock.hash)), 0)
-    val secondReceivingKey = DeterministicWallet.derivePrivateKey(accountKey(master, rootPath(f.state.walletType, Block.LivenetGenesisBlock.hash)), 1)
-    val firstChangeKey = DeterministicWallet.derivePrivateKey(changeKey(master, rootPath(f.state.walletType, Block.LivenetGenesisBlock.hash)), 0)
-
-    assert(nativeSegwitStrategy.computeAddress(firstReceivingKey, Block.LivenetGenesisBlock.hash) == "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu")
-    assert(nativeSegwitStrategy.computeAddress(secondReceivingKey, Block.LivenetGenesisBlock.hash) == "bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g")
-    assert(nativeSegwitStrategy.computeAddress(firstChangeKey, Block.LivenetGenesisBlock.hash) == "bc1q8c6fshw2dlwun7ekn9qwf37cu2rn755upcp6el")
-  }
-
-  // from https://github.com/spesmilo/electrum/blob/master/electrum/tests/test_wallet.py#L218
-  test("electrum bech32 compatibility") { f =>
-    val (privKey, _) = PrivateKey.fromBase58("L4jkdiXszG26SUYvwwJhzGwg37H2nLhrbip7u6crmgNeJysv5FHL", Base58.Prefix.SecretKey)
-    assert(nativeSegwitStrategy.computeAddress(privKey.publicKey, Block.LivenetGenesisBlock.hash) == "bc1q2ccr34wzep58d4239tl3x3734ttle92a8srmuw")
-  }
-
-  test("implement BIP49") { f =>
-    val mnemonics = "pizza afraid guess romance pair steel record jazz rubber prison angle hen heart engage kiss visual helmet twelve lady found between wave rapid twist".split(" ")
-    val seed = MnemonicCode.toSeed(mnemonics, "")
-    val master = DeterministicWallet.generate(seed)
-
-    val accountMaster = accountKey(master, rootPath(f.state.walletType, Block.RegtestGenesisBlock.hash))
-    val firstKey = derivePrivateKey(accountMaster, 0)
-    assert(p2shStrategy.computeAddress(firstKey, Block.RegtestGenesisBlock.hash) === "2MxJejujQJRRJdbfTKNQQ94YCnxJwRaE7yo")
-  }
 
   test("complete transactions (enough funds)") { f =>
     import f._

@@ -1,16 +1,26 @@
 package fr.acinq.eclair.blockchain.electrum
 
 import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
-import fr.acinq.bitcoin.DeterministicWallet.ExtendedPrivateKey
+import fr.acinq.bitcoin.DeterministicWallet._
 import fr.acinq.bitcoin.{Base58, Base58Check, Bech32, Block, ByteVector32, Crypto, DeterministicWallet, OP_PUSHDATA, SIGHASH_ALL, Satoshi, Script, ScriptElt, ScriptWitness, SigVersion, Transaction, TxIn}
-import fr.acinq.eclair.blockchain.electrum.ElectrumWallet.{Data, Utxo, WalletType, bip49RootPath, bip84RootPath}
+import fr.acinq.eclair.blockchain.electrum.ElectrumWallet.{Data, Utxo}
 import fr.acinq.eclair.transactions.{Scripts, Transactions}
 import scodec.bits.ByteVector
 
 import scala.util.Try
 
 trait KeyStore {
+  def master: ExtendedPrivateKey
 
+  def chainHash: ByteVector32
+
+  def accountPath: KeyPath
+
+  def changePath: KeyPath
+
+  def accountKey(index: Long): ExtendedPrivateKey = derivePrivateKey(master, accountPath.path :+ index)
+
+  def changeKey(index: Long): ExtendedPrivateKey = derivePrivateKey(master, changePath.path :+ index)
   /**
     *
     * @param key public key
@@ -23,9 +33,9 @@ trait KeyStore {
     * @param key public key
     * @return the address for this key
     */
-  def computeAddress(key: PublicKey, chainHash: ByteVector32): String
-  def computeAddress(key: ExtendedPrivateKey, chainHash: ByteVector32): String = computeAddress(key.publicKey, chainHash)
-  def computeAddress(key: PrivateKey, chainHash: ByteVector32): String = computeAddress(key.publicKey, chainHash)
+  def computeAddress(key: PublicKey): String
+  def computeAddress(key: ExtendedPrivateKey): String = computeAddress(key.publicKey)
+  def computeAddress(key: PrivateKey): String = computeAddress(key.publicKey)
 
   def signTx(tx: Transaction, d: Data): Transaction
 
@@ -36,7 +46,7 @@ trait KeyStore {
     * @return a tx where all utxos have been added as inputs, signed with dummy invalid signatures. This
     *         is used to estimate the weight of the signed transaction
     */
-  def addUtxos(tx: Transaction, utxos: Seq[Utxo]): Transaction
+  def addUtxosWithDummySig(tx: Transaction, utxos: Seq[Utxo]): Transaction
 
   /**
     *
@@ -49,14 +59,22 @@ trait KeyStore {
     * Compute the wallet's xpub
     *
     * @param master    master key
-    * @param chainHash chain hash
     * @return a (xpub, path) tuple where xpub is the encoded account public key, and path is the derivation path for the account key
     */
-  def computeXPub(master: ExtendedPrivateKey, chainHash: ByteVector32): (String, String)
+  def computeXPub(master: ExtendedPrivateKey): (String, String)
 
 }
 
-class BIP49KeyStore extends KeyStore {
+class BIP49KeyStore(override val master: ExtendedPrivateKey, override val chainHash: ByteVector32) extends KeyStore {
+
+  val rootPath = chainHash match {
+    case Block.RegtestGenesisBlock.hash | Block.TestnetGenesisBlock.hash => "m/49'/1'/0'"
+    case Block.LivenetGenesisBlock.hash => "m/49'/0'/0'"
+  }
+
+  override def accountPath: KeyPath = KeyPath(rootPath + "/0")
+
+  override def changePath: KeyPath = KeyPath(rootPath + "/1")
 
   override def signTx(tx: Transaction, d: Data): Transaction = {
     tx.copy(txIn = tx.txIn.zipWithIndex.map { case (txIn, i) =>
@@ -71,7 +89,7 @@ class BIP49KeyStore extends KeyStore {
 
   override def computePublicKeyScript(key: PublicKey) = Script.pay2sh(Script.pay2wpkh(key))
 
-  override def computeAddress(key: PublicKey, chainHash: ByteVector32): String = {
+  override def computeAddress(key: PublicKey): String = {
     val script = Script.pay2wpkh(key)
     val hash = Crypto.hash160(Script.write(script))
     chainHash match {
@@ -80,7 +98,7 @@ class BIP49KeyStore extends KeyStore {
     }
   }
 
-  def addUtxos(tx: Transaction, utxos: Seq[Utxo]): Transaction = {
+  def addUtxosWithDummySig(tx: Transaction, utxos: Seq[Utxo]): Transaction = {
     tx.copy(txIn = utxos.map { case utxo =>
       // we use dummy signature here, because the result is only used to estimate fees
       val sig = ByteVector.fill(71)(1)
@@ -104,8 +122,8 @@ class BIP49KeyStore extends KeyStore {
     } getOrElse None
   }
 
-  override def computeXPub(master: ExtendedPrivateKey, chainHash: ByteVector32): (String, String) = {
-    val xpub = DeterministicWallet.publicKey(DeterministicWallet.derivePrivateKey(master, bip49RootPath(chainHash)))
+  override def computeXPub(master: ExtendedPrivateKey): (String, String) = {
+    val xpub = DeterministicWallet.publicKey(DeterministicWallet.derivePrivateKey(master, KeyPath(rootPath)))
     val prefix = chainHash match {
       case Block.LivenetGenesisBlock.hash => DeterministicWallet.ypub
       case Block.RegtestGenesisBlock.hash | Block.TestnetGenesisBlock.hash => DeterministicWallet.upub
@@ -114,13 +132,21 @@ class BIP49KeyStore extends KeyStore {
   }
 }
 
-class BIP84KeyStore extends KeyStore {
+class BIP84KeyStore(override val master: ExtendedPrivateKey, override val chainHash: ByteVector32) extends KeyStore {
+  val rootPath = chainHash match {
+    case Block.RegtestGenesisBlock.hash | Block.TestnetGenesisBlock.hash => "m/84'/1'/0'"
+    case Block.LivenetGenesisBlock.hash => "m/84'/0'/0'"
+  }
+
+  override def accountPath: KeyPath = KeyPath(rootPath + "/0")
+
+  override def changePath: KeyPath = KeyPath(rootPath + "/1")
 
   /**
     * @param key the public key
     * @return the bech32 encoded witness program for the p2wpkh script of this key
     */
-  override def computeAddress(key: PublicKey, chainHash: ByteVector32): String = chainHash match {
+  override def computeAddress(key: PublicKey): String = chainHash match {
     case Block.RegtestGenesisBlock.hash => Bech32.encodeWitnessAddress("bcrt", 0, Crypto.hash160(key.value))
     case Block.TestnetGenesisBlock.hash => Bech32.encodeWitnessAddress("tb", 0, Crypto.hash160(key.value))
     case Block.LivenetGenesisBlock.hash => Bech32.encodeWitnessAddress("bc", 0, Crypto.hash160(key.value))
@@ -139,7 +165,7 @@ class BIP84KeyStore extends KeyStore {
     })
   }
 
-  override def addUtxos(tx: Transaction, utxos: Seq[Utxo]): Transaction = {
+  override def addUtxosWithDummySig(tx: Transaction, utxos: Seq[Utxo]): Transaction = {
     tx.copy(txIn = utxos.map { case utxo =>
       // we use dummy signature here, because the result is only used to estimate fees
       val sig = Scripts.der(Transactions.PlaceHolderSig)
@@ -160,8 +186,8 @@ class BIP84KeyStore extends KeyStore {
     } getOrElse None
   }
 
-  override def computeXPub(master: ExtendedPrivateKey, chainHash: ByteVector32): (String, String) = {
-    val zpub = DeterministicWallet.publicKey(DeterministicWallet.derivePrivateKey(master, ElectrumWallet.bip84RootPath(chainHash)))
+  override def computeXPub(master: ExtendedPrivateKey): (String, String) = {
+    val zpub = DeterministicWallet.publicKey(DeterministicWallet.derivePrivateKey(master, KeyPath(rootPath)))
     val prefix = chainHash match {
       case Block.LivenetGenesisBlock.hash => DeterministicWallet.zpub
       case Block.RegtestGenesisBlock.hash | Block.TestnetGenesisBlock.hash => DeterministicWallet.vpub
