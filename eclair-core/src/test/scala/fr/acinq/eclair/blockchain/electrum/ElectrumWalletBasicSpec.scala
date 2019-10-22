@@ -35,8 +35,8 @@ class ElectrumWalletBasicSpec extends fixture.FunSuite with Logging {
   import ElectrumWallet._
   import ElectrumWalletBasicSpec._
 
-  val p2shStrategy = new P2SHStrategy
-  val nativeSegwitStrategy = new NativeSegwitStrategy
+  val p2shStrategy = new BIP49KeyStore
+  val nativeSegwitStrategy = new BIP84KeyStore
 
   case class FixtureParam(state: Data)
 

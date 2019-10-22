@@ -9,7 +9,7 @@ import scodec.bits.ByteVector
 
 import scala.util.Try
 
-trait ElectrumAddressStrategy {
+trait KeyStore {
 
   /**
     *
@@ -56,7 +56,7 @@ trait ElectrumAddressStrategy {
 
 }
 
-class P2SHStrategy extends ElectrumAddressStrategy {
+class BIP49KeyStore extends KeyStore {
 
   override def signTx(tx: Transaction, d: Data): Transaction = {
     tx.copy(txIn = tx.txIn.zipWithIndex.map { case (txIn, i) =>
@@ -114,7 +114,7 @@ class P2SHStrategy extends ElectrumAddressStrategy {
   }
 }
 
-class NativeSegwitStrategy extends ElectrumAddressStrategy {
+class BIP84KeyStore extends KeyStore {
 
   /**
     * @param key the public key

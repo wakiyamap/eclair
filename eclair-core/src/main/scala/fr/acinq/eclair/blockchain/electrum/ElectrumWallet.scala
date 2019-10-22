@@ -665,8 +665,8 @@ object ElectrumWallet {
                   lastReadyMessage: Option[WalletReady]) extends Logging {
 
     val strategy = walletType match {
-      case P2SH_SEGWIT => new P2SHStrategy
-      case NATIVE_SEGWIT => new NativeSegwitStrategy
+      case P2SH_SEGWIT => new BIP49KeyStore
+      case NATIVE_SEGWIT => new BIP84KeyStore
     }
 
     val chainHash = blockchain.chainHash
