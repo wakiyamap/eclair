@@ -483,9 +483,9 @@ class ElectrumWallet(seed: ByteVector, client: ActorRef, params: ElectrumWallet.
 
     case Event(GetData, data) => stay replying GetDataResponse(data)
 
-    case Event(GetRootPub, data) =>
-      val (pub, path) = data.strategy.computeRootPub(master, chainHash)
-      stay replying GetRootPubResponse(pub, path)
+    case Event(GetXpub, data) =>
+      val (pub, path) = data.strategy.computeXPub(master, chainHash)
+      stay replying GetXpubResponse(pub, path)
 
     case Event(ElectrumClient.BroadcastTransaction(tx), _) => stay replying ElectrumClient.BroadcastTransactionResponse(tx, Some(Error(-1, "wallet is not connected")))
   }
@@ -512,8 +512,8 @@ object ElectrumWallet {
   case object GetBalance extends Request
   case class GetBalanceResponse(confirmed: Satoshi, unconfirmed: Satoshi) extends Response
 
-  case object GetRootPub extends Request
-  case class GetRootPubResponse(xpub: String, path: String) extends Response
+  case object GetXpub extends Request
+  case class GetXpubResponse(xpub: String, path: String) extends Response
 
   case object GetCurrentReceiveAddress extends Request
   case class GetCurrentReceiveAddressResponse(address: String) extends Response

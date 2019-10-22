@@ -96,7 +96,7 @@ class ElectrumWalletBasicSpec extends fixture.FunSuite with Logging {
   test("derive bip84 keys", Tag("bech32")) { f =>
     val seed = MnemonicCode.toSeed("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about", passphrase = "")
     val master = DeterministicWallet.generate(seed)
-    val (accountZpub, _) = nativeSegwitStrategy.computeRootPub(master, Block.LivenetGenesisBlock.hash)
+    val (accountZpub, _) = nativeSegwitStrategy.computeXPub(master, Block.LivenetGenesisBlock.hash)
     assert(accountZpub == "zpub6rFR7y4Q2AijBEqTUquhVz398htDFrtymD9xYYfG1m4wAcvPhXNfE3EfH1r1ADqtfSdVCToUG868RvUUkgDKf31mGDtKsAYz2oz2AGutZYs") // m/84'/0'/0'
 
     val firstReceivingKey = DeterministicWallet.derivePrivateKey(accountKey(master, rootPath(f.state.walletType, Block.LivenetGenesisBlock.hash)), 0)

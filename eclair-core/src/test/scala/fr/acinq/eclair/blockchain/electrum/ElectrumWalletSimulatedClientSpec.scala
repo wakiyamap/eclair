@@ -91,8 +91,8 @@ class ElectrumWalletSimulatedClientSpec extends TestkitBaseClass {
     val ready = listener.expectMsgType[WalletReady]
     assert(ready.timestamp == headers.last.time)
     listener.expectMsgType[NewWalletReceiveAddress]
-    listener.send(wallet, GetRootPub)
-    listener.expectMsgType[GetRootPubResponse]
+    listener.send(wallet, GetXpub)
+    listener.expectMsgType[GetXpubResponse]
 
     withFixture(test.toNoArgTest(FixtureParam(wallet, walletParameters, seed, headers, sender, client, listener)))
   }
@@ -112,16 +112,16 @@ class ElectrumWalletSimulatedClientSpec extends TestkitBaseClass {
 
   test("xpub and derivation path, p2sh-p2wpkh") { f =>
     import f._
-    listener.send(wallet, GetRootPub)
-    val GetRootPubResponse(xpub, path) = listener.expectMsgType[GetRootPubResponse]
+    listener.send(wallet, GetXpub)
+    val GetXpubResponse(xpub, path) = listener.expectMsgType[GetXpubResponse]
     assert(xpub == "upub5DffbMENbUsLcJbhufWvy1jourQfXfC6SoYyxhy2gPKeTSGzYHB3wKTnKH2LYCDemSzZwqzNcHNjnQZJCDn7Jy2LvvQeysQ6hrcK5ogp11B")
     assert(path == "m/49'/1'/0'")
   }
 
   test("xpub and derivation path, bech32", Tag("bech32")) { f =>
     import f._
-    listener.send(wallet, GetRootPub)
-    val GetRootPubResponse(vpub, path) = listener.expectMsgType[GetRootPubResponse]
+    listener.send(wallet, GetXpub)
+    val GetXpubResponse(vpub, path) = listener.expectMsgType[GetXpubResponse]
     assert(vpub == "vpub5Y8LGrnzn7VL1A2nAivXf4bPBV3t6rx4s3suatFPvZXQqK4QtfSz5AgKxz8cDupddFozJLrotikBeoSdspvEdS9YSZ5h3LwmoDqaug8UaH7")
     assert(path == "m/84'/1'/0'")
 

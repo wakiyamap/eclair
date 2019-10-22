@@ -52,7 +52,7 @@ trait KeyStore {
     * @param chainHash chain hash
     * @return a (xpub, path) tuple where xpub is the encoded account public key, and path is the derivation path for the account key
     */
-  def computeRootPub(master: ExtendedPrivateKey, chainHash: ByteVector32): (String, String)
+  def computeXPub(master: ExtendedPrivateKey, chainHash: ByteVector32): (String, String)
 
 }
 
@@ -104,7 +104,7 @@ class BIP49KeyStore extends KeyStore {
     } getOrElse None
   }
 
-  override def computeRootPub(master: ExtendedPrivateKey, chainHash: ByteVector32): (String, String) = {
+  override def computeXPub(master: ExtendedPrivateKey, chainHash: ByteVector32): (String, String) = {
     val xpub = DeterministicWallet.publicKey(DeterministicWallet.derivePrivateKey(master, bip49RootPath(chainHash)))
     val prefix = chainHash match {
       case Block.LivenetGenesisBlock.hash => DeterministicWallet.ypub
@@ -160,7 +160,7 @@ class BIP84KeyStore extends KeyStore {
     } getOrElse None
   }
 
-  override def computeRootPub(master: ExtendedPrivateKey, chainHash: ByteVector32): (String, String) = {
+  override def computeXPub(master: ExtendedPrivateKey, chainHash: ByteVector32): (String, String) = {
     val zpub = DeterministicWallet.publicKey(DeterministicWallet.derivePrivateKey(master, ElectrumWallet.bip84RootPath(chainHash)))
     val prefix = chainHash match {
       case Block.LivenetGenesisBlock.hash => DeterministicWallet.zpub
