@@ -595,8 +595,6 @@ class Peer(val nodeParams: NodeParams, remoteNodeId: PublicKey, authenticator: A
 
     case Event(_: PingTimeout, _) => stay // we got disconnected after sending a ping
 
-    case Event(_: PayToOpenTimeout, _) => stay // ignored
-
     case Event(_: BadMessage, _) => stay // we got disconnected while syncing
 
     case Event(o@(_: UpdateAddHtlc, _: PayToOpenRequest), _) =>

@@ -174,9 +174,7 @@ class MultiPartHandler(nodeParams: NodeParams, db: IncomingPaymentsDb, commandBu
                   ctx.system.scheduler.scheduleOnce(delay)(decision.tryFailure(new RuntimeException("pay-to-open timed out")))
                   decision
                     .future
-                    .recover { case t: Throwable =>
-                      t.printStackTrace()
-                      false }
+                    .recover { case _: Throwable => false }
                     .foreach {
                       case true =>
                         // user said yes
