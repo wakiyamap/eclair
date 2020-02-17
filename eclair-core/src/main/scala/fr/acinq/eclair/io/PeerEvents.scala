@@ -32,4 +32,4 @@ case class PeerDisconnected(peer: ActorRef, nodeId: PublicKey) extends PeerEvent
 /**
  * @param expireAt unix timestamp, this request will be cancelled at that time
  */
-case class PayToOpenRequestEvent(peer: ActorRef, payToOpenRequest: PayToOpenRequest, decision: Promise[Boolean], expireAt: Long)
+case class PayToOpenRequestEvent(peer: ActorRef, payToOpenRequest: PayToOpenRequest, decision: Promise[Boolean])

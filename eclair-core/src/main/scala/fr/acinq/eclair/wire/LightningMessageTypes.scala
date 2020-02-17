@@ -302,6 +302,7 @@ case class PayToOpenRequest(chainHash: ByteVector32,
                             amountMsat: MilliSatoshi,
                             feeSatoshis: Satoshi,
                             paymentHash: ByteVector32,
+                            expireAt: Long,
                             htlc_opt: Option[UpdateAddHtlc]
                            ) extends LightningMessage with HasChainHash {
   def denied: PayToOpenResponse = PayToOpenResponse(chainHash, paymentHash, ByteVector32.Zeroes) // preimage all-zero means user says no to the pay-to-open request
@@ -334,7 +335,8 @@ object PayToOpenRequest {
     val totalAmount = requests.map(_.amountMsat).sum
     val feeAmount = PayToOpenRequest.computeFee(totalAmount)
     val fundingAmount = PayToOpenRequest.computeFunding(totalAmount, feeAmount)
-    PayToOpenRequest(chainHash, fundingAmount, totalAmount, feeAmount, paymentHash, None)
+    val expireAt = requests.map(_.expireAt).min // the aggregate request expires when the first of the underlying request expires
+    PayToOpenRequest(chainHash, fundingAmount, totalAmount, feeAmount, paymentHash, expireAt, None)
   }
 
 }
