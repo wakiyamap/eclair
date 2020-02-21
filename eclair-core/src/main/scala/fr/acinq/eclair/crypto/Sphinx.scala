@@ -141,10 +141,10 @@ object Sphinx extends Logging {
      * @param payloads      payloads for all the hops.
      * @return filler bytes.
      */
-    def generateFiller(keyType: String, sharedSecrets: Seq[ByteVector32], payloads: Seq[ByteVector]): ByteVector = {
+    def generateFiller(keyType: String, sharedSecrets: Seq[ByteVector32], payloads: Seq[ByteVector], fillerPrefix: Int = 0): ByteVector = {
       require(sharedSecrets.length == payloads.length, "the number of secrets should equal the number of payloads")
 
-      (sharedSecrets zip payloads).foldLeft(ByteVector.empty)((padding, secretAndPayload) => {
+      (sharedSecrets zip payloads).foldLeft(ByteVector.fill(fillerPrefix)(0))((padding, secretAndPayload) => {
         val (secret, perHopPayload) = secretAndPayload
         val perHopPayloadLength = peekPayloadLength(perHopPayload)
         require(perHopPayloadLength == perHopPayload.length + MacLength, s"invalid payload: length isn't correctly encoded: $perHopPayload")
@@ -168,13 +168,13 @@ object Sphinx extends Logging {
      *         failure messages upstream.
      *         or a BadOnion error containing the hash of the invalid onion.
      */
-    def peel(privateKey: PrivateKey, associatedData: ByteVector, packet: wire.OnionRoutingPacket): Either[wire.BadOnion, DecryptedPacket] = packet.version match {
+    def peel(privateKey: PrivateKey, associatedData: ByteVector, packet: wire.OnionRoutingPacket, checkHmac: Boolean = true): Either[wire.BadOnion, DecryptedPacket] = packet.version match {
       case 0 => Try(PublicKey(packet.publicKey, checkValid = true)) match {
         case Success(packetEphKey) =>
           val sharedSecret = computeSharedSecret(packetEphKey, privateKey)
           val mu = generateKey("mu", sharedSecret)
           val check = mac(mu, packet.payload ++ associatedData)
-          if (check == packet.hmac) {
+          if (check == packet.hmac || !checkHmac) {
             val rho = generateKey("rho", sharedSecret)
             // Since we don't know the length of the per-hop payload (we will learn it once we decode the first bytes),
             // we have to pessimistically generate a long cipher stream.
@@ -245,9 +245,9 @@ object Sphinx extends Logging {
      * @return An onion packet with all shared secrets. The onion packet can be sent to the first node in the list, and
      *         the shared secrets (one per node) can be used to parse returned failure messages if needed.
      */
-    def create(sessionKey: PrivateKey, publicKeys: Seq[PublicKey], payloads: Seq[ByteVector], associatedData: ByteVector32): PacketAndSecrets = {
+    def create(sessionKey: PrivateKey, publicKeys: Seq[PublicKey], payloads: Seq[ByteVector], associatedData: ByteVector32, fillerPrefix: Int = 0): PacketAndSecrets = {
       val (ephemeralPublicKeys, sharedsecrets) = computeEphemeralPublicKeysAndSharedSecrets(sessionKey, publicKeys)
-      val filler = generateFiller("rho", sharedsecrets.dropRight(1), payloads.dropRight(1))
+      val filler = generateFiller("rho", sharedsecrets.dropRight(1), payloads.dropRight(1), fillerPrefix)
 
       // We deterministically-derive the initial payload bytes: see https://github.com/lightningnetwork/lightning-rfc/pull/697
       val startingBytes = generateStream(generateKey("pad", sessionKey.value), PayloadLength)

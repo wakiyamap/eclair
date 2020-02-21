@@ -19,7 +19,7 @@ package fr.acinq.eclair.crypto
 import fr.acinq.bitcoin.ByteVector32
 import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
 import fr.acinq.eclair.wire._
-import fr.acinq.eclair.{UInt64, wire}
+import fr.acinq.eclair.{UInt64, randomBytes32, randomKey, wire}
 import org.scalatest.FunSuite
 import scodec.bits._
 
@@ -32,6 +32,277 @@ class SphinxSpec extends FunSuite {
 
   import Sphinx._
   import SphinxSpec._
+
+  test("sphinx rendezvous") {
+    // Carol -> N -> Bob -> M -> Alice
+    val (n, bob, m, alice) = (randomKey, randomKey, randomKey, randomKey)
+    val paymentHash = randomBytes32
+    val carolPayloads = Seq(
+      hex"000404040404040404000000000000000400000004000000000000000000000000", // N
+      hex"000505050505050505000000000000000500000005000000000000000000000000" // Bob
+    )
+    // This will likely be a constant set to PaymentPacket.PayloadLength / 2 in the final protocol.
+    val carolPayloadsLength = carolPayloads.map(_.length + Sphinx.MacLength).sum.toInt
+    val alicePayloads = Seq(
+      hex"000101010101010101000000000000000100000001000000000000000000000000", // Bob
+      hex"000202020202020202000000000000000200000002000000000000000000000000", // M
+      hex"000303030303030303000000000000000300000003000000000000000000000000" // Alice herself
+    )
+
+    // Pre-encryption at Alice site.
+    val rdvOnion = {
+      val sessionKeyAlice = randomKey
+      // NB: it works if we use fillerPrefix > Carol's payload length, but it may leak information to M so should be avoided.
+      PaymentPacket.create(sessionKeyAlice, Seq(bob, m, alice).map(_.publicKey), alicePayloads, paymentHash, carolPayloadsLength)
+    }
+
+    // Finalize encryption at Carol site.
+    val (carolOnion, carolFiller) = {
+      val sessionKeyCarol = randomKey
+      val ss = Sphinx.computeEphemeralPublicKeysAndSharedSecrets(sessionKeyCarol, Seq(n, bob).map(_.publicKey))
+      // Finalize filler.
+      val carolFiller = PaymentPacket.generateFiller("rho", ss._2, carolPayloads).padLeft(PaymentPacket.PayloadLength)
+      val rdvOnionWithFiller = rdvOnion.packet.copy(payload = rdvOnion.packet.payload xor carolFiller)
+      // Finalize onion encryption.
+      val packet1 = PaymentPacket.wrap(carolPayloads.last, paymentHash, ss._1.last, ss._2.last, Right(rdvOnionWithFiller))
+      val carolOnion = PaymentPacket.wrap(carolPayloads.head, paymentHash, ss._1.head, ss._2.head, Right(packet1))
+      (carolOnion, carolFiller)
+    }
+
+    // Decrypt at N.
+    val Right(packetN) = PaymentPacket.peel(n, paymentHash, carolOnion)
+    assert(packetN.payload === carolPayloads.head)
+
+    // Decrypt at Bob.
+    val Right(packetBobCarol) = PaymentPacket.peel(bob, paymentHash, packetN.nextPacket)
+    assert(packetBobCarol.payload === carolPayloads.last)
+
+    // Bob discovers rdvOnion.packet.publicKey in the payload, which tells him that he is a rendezvous point and needs
+    // to decrypt a second time, after unapplying a filler.
+    // Bob also receives either directly the filler to unapply or the keys needed to re-create it.
+
+    val tweakedPacket = packetBobCarol.nextPacket.copy(
+      // Trick 1: unapply Carol's filler.
+      payload = packetBobCarol.nextPacket.payload xor carolFiller,
+      // Trick 2: replace public key by value provided in onion payload.
+      publicKey = rdvOnion.packet.publicKey
+    )
+    val Right(packetBobAlice) = PaymentPacket.peel(bob, paymentHash, tweakedPacket)
+    assert(packetBobAlice.payload === alicePayloads.head)
+
+    // Decrypt at M
+    val Right(packetM) = PaymentPacket.peel(m, paymentHash, packetBobAlice.nextPacket)
+    assert(packetM.payload === alicePayloads(1))
+
+    // Decrypt at Alice
+    val Right(packetAlice) = PaymentPacket.peel(alice, paymentHash, packetM.nextPacket)
+    assert(packetAlice.payload === alicePayloads(2))
+  }
+
+  test("sphinx rendezvous whole onion used") {
+    // Carol -> N1 -> N2 -> Bob -> M1 -> M2 -> Alice
+    val (n1, n2, bob, m1, m2, alice) = (randomKey, randomKey, randomKey, randomKey, randomKey, randomKey)
+    val paymentHash = randomBytes32
+    val carolPayloads = Seq(
+      hex"99 111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111", // N1
+      hex"a9 22222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222", // N2
+      hex"e5 bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" // Bob
+    )
+    // This will likely be a constant set to PaymentPacket.PayloadLength / 2 in the final protocol.
+    val carolPayloadsLength = carolPayloads.map(_.length + Sphinx.MacLength).sum.toInt
+    assert(carolPayloadsLength === 650)
+    val alicePayloads = Seq(
+      hex"90 bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", // Bob
+      hex"79 33333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333", // M1
+      hex"63 444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444", // M2
+      hex"9a aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" // Alice herself
+    )
+    assert(alicePayloads.map(_.length + Sphinx.MacLength).sum === 650)
+
+    // Pre-encryption at Alice site.
+    val rdvOnion = {
+      val sessionKeyAlice = randomKey
+      PaymentPacket.create(sessionKeyAlice, Seq(bob, m1, m2, alice).map(_.publicKey), alicePayloads, paymentHash, carolPayloadsLength)
+    }
+
+    // Finalize encryption at Carol site.
+    val (carolOnion, carolFiller) = {
+      val sessionKeyCarol = randomKey
+      val ss = Sphinx.computeEphemeralPublicKeysAndSharedSecrets(sessionKeyCarol, Seq(n1, n2, bob).map(_.publicKey))
+      val carolFiller = {
+        val filler = PaymentPacket.generateFiller("rho", ss._2, carolPayloads)
+        assert(filler.length === 650)
+        filler.padLeft(PaymentPacket.PayloadLength)
+      }
+      val rdvOnionWithFiller = rdvOnion.packet.copy(payload = rdvOnion.packet.payload xor carolFiller)
+      val packet1 = PaymentPacket.wrap(carolPayloads(2), paymentHash, ss._1(2), ss._2(2), Right(rdvOnionWithFiller))
+      val packet2 = PaymentPacket.wrap(carolPayloads(1), paymentHash, ss._1(1), ss._2(1), Right(packet1))
+      val carolOnion = PaymentPacket.wrap(carolPayloads.head, paymentHash, ss._1.head, ss._2.head, Right(packet2))
+      (carolOnion, carolFiller)
+    }
+
+    // Decrypt at N1.
+    val Right(packetN1) = PaymentPacket.peel(n1, paymentHash, carolOnion)
+    assert(packetN1.payload === carolPayloads.head)
+
+    // Decrypt at N2.
+    val Right(packetN2) = PaymentPacket.peel(n2, paymentHash, packetN1.nextPacket)
+    assert(packetN2.payload === carolPayloads(1))
+
+    // Decrypt at Bob.
+    val Right(packetBobCarol) = PaymentPacket.peel(bob, paymentHash, packetN2.nextPacket)
+    assert(packetBobCarol.payload === carolPayloads(2))
+    val tweakedPacket = packetBobCarol.nextPacket.copy(
+      payload = packetBobCarol.nextPacket.payload xor carolFiller,
+      publicKey = rdvOnion.packet.publicKey
+    )
+    val Right(packetBobAlice) = PaymentPacket.peel(bob, paymentHash, tweakedPacket)
+    assert(packetBobAlice.payload === alicePayloads.head)
+
+    // Decrypt at M1
+    val Right(packetM1) = PaymentPacket.peel(m1, paymentHash, packetBobAlice.nextPacket)
+    assert(packetM1.payload === alicePayloads(1))
+
+    // Decrypt at M2
+    val Right(packetM2) = PaymentPacket.peel(m2, paymentHash, packetM1.nextPacket)
+    assert(packetM2.payload === alicePayloads(2))
+
+    // Decrypt at Alice
+    val Right(packetAlice) = PaymentPacket.peel(alice, paymentHash, packetM2.nextPacket)
+    assert(packetAlice.payload === alicePayloads(3))
+  }
+
+  test("sphinx rendezvous cheating attempts") {
+    // Carol -> N1 -> N2 -> Bob -> M1 -> M2 -> Alice
+    val (n1, n2, bob, m1, m2, alice) = (randomKey, randomKey, randomKey, randomKey, randomKey, randomKey)
+    val paymentHash = randomBytes32
+    val carolPayloads = Seq(
+      hex"99 111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111", // N1
+      hex"a9 22222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222", // N2
+      hex"e5 bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" // Bob
+    )
+    // This will likely be a constant set to PaymentPacket.PayloadLength / 2 in the final protocol.
+    val carolPayloadsLength = carolPayloads.map(_.length + Sphinx.MacLength).sum.toInt
+    assert(carolPayloadsLength === 650)
+    val alicePayloads = Seq(
+      hex"90 bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", // Bob
+      hex"79 33333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333", // M1
+      hex"63 444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444", // M2
+      hex"9a aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" // Alice herself
+    )
+    assert(alicePayloads.map(_.length + Sphinx.MacLength).sum === 650)
+
+    // Pre-encryption at Alice site.
+    val rdvOnion = {
+      val sessionKeyAlice = randomKey
+      PaymentPacket.create(sessionKeyAlice, Seq(bob, m1, m2, alice).map(_.publicKey), alicePayloads, paymentHash, carolPayloadsLength)
+    }
+
+    // Carol uses more than her 650 allowed bytes.
+    {
+      val carolPayloads = Seq(
+        hex"9a 11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111", // N1
+        hex"a9 22222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222", // N2
+        hex"e5 bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" // Bob
+      )
+      // Finalize encryption at Carol site.
+      val (carolOnion, _) = {
+        val sessionKeyCarol = randomKey
+        val ss = Sphinx.computeEphemeralPublicKeysAndSharedSecrets(sessionKeyCarol, Seq(n1, n2, bob).map(_.publicKey))
+        val carolFiller = {
+          val filler = PaymentPacket.generateFiller("rho", ss._2, carolPayloads)
+          assert(filler.length === 651)
+          filler.padLeft(PaymentPacket.PayloadLength)
+        }
+        val rdvOnionWithFiller = rdvOnion.packet.copy(payload = rdvOnion.packet.payload xor carolFiller)
+        val packet1 = PaymentPacket.wrap(carolPayloads(2), paymentHash, ss._1(2), ss._2(2), Right(rdvOnionWithFiller))
+        val packet2 = PaymentPacket.wrap(carolPayloads(1), paymentHash, ss._1(1), ss._2(1), Right(packet1))
+        val carolOnion = PaymentPacket.wrap(carolPayloads.head, paymentHash, ss._1.head, ss._2.head, Right(packet2))
+        (carolOnion, carolFiller)
+      }
+
+      // Decrypt at N1.
+      val Right(packetN1) = PaymentPacket.peel(n1, paymentHash, carolOnion)
+      assert(packetN1.payload === carolPayloads.head)
+
+      // Decrypt at N2.
+      assert(PaymentPacket.peel(n2, paymentHash, packetN1.nextPacket).isLeft)
+    }
+
+    // Carol uses less than her 650 allowed bytes and sends invalid filler to cover it.
+    {
+      val carolPayloads2 = Seq(
+        hex"99 111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111", // N1
+        hex"a9 22222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222", // N2
+        hex"e4 bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" // Bob
+      )
+      // Finalize encryption at Carol site.
+      val (carolOnion, _) = {
+        val sessionKeyCarol = randomKey
+        val ss = Sphinx.computeEphemeralPublicKeysAndSharedSecrets(sessionKeyCarol, Seq(n1, n2, bob).map(_.publicKey))
+        val carolFiller = {
+          val filler = PaymentPacket.generateFiller("rho", ss._2, carolPayloads)
+          assert(filler.length === 650)
+          filler.padLeft(PaymentPacket.PayloadLength)
+        }
+        val rdvOnionWithFiller = rdvOnion.packet.copy(payload = rdvOnion.packet.payload xor carolFiller)
+        val packet1 = PaymentPacket.wrap(carolPayloads2(2), paymentHash, ss._1(2), ss._2(2), Right(rdvOnionWithFiller))
+        val packet2 = PaymentPacket.wrap(carolPayloads2(1), paymentHash, ss._1(1), ss._2(1), Right(packet1))
+        val carolOnion = PaymentPacket.wrap(carolPayloads2.head, paymentHash, ss._1.head, ss._2.head, Right(packet2))
+        (carolOnion, carolFiller)
+      }
+
+      // Decrypt at N1.
+      val Right(packetN1) = PaymentPacket.peel(n1, paymentHash, carolOnion)
+      assert(packetN1.payload === carolPayloads2.head)
+
+      // Decrypt at N2.
+      assert(PaymentPacket.peel(n2, paymentHash, packetN1.nextPacket).isLeft)
+      val Right(packetN2) = PaymentPacket.peel(n2, paymentHash, packetN1.nextPacket, checkHmac = false)
+      assert(packetN2.payload === carolPayloads2(1))
+
+      // Decrypt at Bob.
+      assert(PaymentPacket.peel(bob, paymentHash, packetN2.nextPacket).isLeft)
+      // TODO: Bob should reject a filler that's not 650 bytes long
+    }
+
+    // Carol uses another payment_hash
+    {
+      val paymentHash2 = randomBytes32
+      // Finalize encryption at Carol site.
+      val (carolOnion, carolFiller) = {
+        val sessionKeyCarol = randomKey
+        val ss = Sphinx.computeEphemeralPublicKeysAndSharedSecrets(sessionKeyCarol, Seq(n1, n2, bob).map(_.publicKey))
+        val carolFiller = {
+          val filler = PaymentPacket.generateFiller("rho", ss._2, carolPayloads)
+          assert(filler.length === 650)
+          filler.padLeft(PaymentPacket.PayloadLength)
+        }
+        val rdvOnionWithFiller = rdvOnion.packet.copy(payload = rdvOnion.packet.payload xor carolFiller)
+        val packet1 = PaymentPacket.wrap(carolPayloads(2), paymentHash2, ss._1(2), ss._2(2), Right(rdvOnionWithFiller))
+        val packet2 = PaymentPacket.wrap(carolPayloads(1), paymentHash2, ss._1(1), ss._2(1), Right(packet1))
+        val carolOnion = PaymentPacket.wrap(carolPayloads.head, paymentHash2, ss._1.head, ss._2.head, Right(packet2))
+        (carolOnion, carolFiller)
+      }
+
+      // Decrypt at N1.
+      val Right(packetN1) = PaymentPacket.peel(n1, paymentHash2, carolOnion)
+      assert(packetN1.payload === carolPayloads.head)
+
+      // Decrypt at N2.
+      val Right(packetN2) = PaymentPacket.peel(n2, paymentHash2, packetN1.nextPacket)
+      assert(packetN2.payload === carolPayloads(1))
+
+      // Decrypt at Bob.
+      val Right(packetBobCarol) = PaymentPacket.peel(bob, paymentHash2, packetN2.nextPacket)
+      assert(packetBobCarol.payload === carolPayloads(2))
+      val tweakedPacket = packetBobCarol.nextPacket.copy(
+        payload = packetBobCarol.nextPacket.payload xor carolFiller,
+        publicKey = rdvOnion.packet.publicKey
+      )
+      assert(PaymentPacket.peel(bob, paymentHash2, tweakedPacket).isLeft)
+    }
+  }
 
   /*
   hop_shared_secret[0] = 0x53eb63ea8a3fec3b3cd433b85cd62a4b145e1dda09391b348c4e1cd36a03ea66
