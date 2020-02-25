@@ -245,12 +245,23 @@ object Sphinx extends Logging {
      * @return An onion packet with all shared secrets. The onion packet can be sent to the first node in the list, and
      *         the shared secrets (one per node) can be used to parse returned failure messages if needed.
      */
-    def create(sessionKey: PrivateKey, publicKeys: Seq[PublicKey], payloads: Seq[ByteVector], associatedData: ByteVector32, fillerPrefix: Int = 0): PacketAndSecrets = {
+    def create(sessionKey: PrivateKey, publicKeys: Seq[PublicKey], payloads: Seq[ByteVector], associatedData: ByteVector32, fillerPrefix: Int = 0, rdv: Option[PublicKey] = None): PacketAndSecrets = {
       val (ephemeralPublicKeys, sharedsecrets) = computeEphemeralPublicKeysAndSharedSecrets(sessionKey, publicKeys)
       val filler = generateFiller("rho", sharedsecrets.dropRight(1), payloads.dropRight(1), fillerPrefix)
 
       // We deterministically-derive the initial payload bytes: see https://github.com/lightningnetwork/lightning-rfc/pull/697
-      val startingBytes = generateStream(generateKey("pad", sessionKey.value), PayloadLength)
+      val startingBytes = rdv match {
+        case Some(rdv) =>
+          val rdvSecret = computeSharedSecret(rdv, sessionKey) // TODO: not exactly the final DH we'll want
+          val rdvPrefill = generateStream(generateKey("prefill", rdvSecret), PayloadLength)
+          sharedsecrets.zip(payloads).reverse.foldLeft((0L, rdvPrefill)) { case ((offset, prefiller), (secret, payload)) =>
+            val offset1 = offset + payload.length + MacLength
+            val key = generateKey("rho", secret)
+            val prefiller1 = prefiller xor generateStream(key, 2 * PayloadLength).drop(offset1)
+            (offset1, prefiller1)
+          }._2
+        case None => generateStream(generateKey("pad", sessionKey.value), PayloadLength)
+      }
       val lastPacket = wrap(payloads.last, associatedData, ephemeralPublicKeys.last, sharedsecrets.last, Left(startingBytes), filler)
 
       @tailrec

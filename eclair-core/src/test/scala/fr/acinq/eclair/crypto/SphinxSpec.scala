@@ -16,7 +16,7 @@
 
 package fr.acinq.eclair.crypto
 
-import fr.acinq.bitcoin.ByteVector32
+import fr.acinq.bitcoin.{ByteVector32, Crypto}
 import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
 import fr.acinq.eclair.wire._
 import fr.acinq.eclair.{UInt64, randomBytes32, randomKey, wire}
@@ -302,6 +302,48 @@ class SphinxSpec extends FunSuite {
       )
       assert(PaymentPacket.peel(bob, paymentHash2, tweakedPacket).isLeft)
     }
+  }
+
+  test("cdecker's rendezvous") {
+    // Carol -> ... -> Bob -> M1 -> M2 -> Alice
+    // We don't care much about the hops before Bob: that will use a standard onion entirely created by Carol, with the
+    // rendezvous onion simply embedded in Bob's per-hop payload.
+    val (bob, m1, m2, alice) = (randomKey, randomKey, randomKey, randomKey)
+    val paymentHash = randomBytes32
+    val alicePayloads = Seq(
+      // We don't even need a payload for Bob, which is great (saves space in the invoice and outer onion)
+      hex"16 11111111111111111111111111111111111111111111", // M1
+      hex"18 222222222222222222222222222222222222222222222222", // M2
+      hex"28 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" // Alice herself
+    )
+    val alicePayloadsLength = alicePayloads.map(_.size + Sphinx.MacLength).sum.toInt
+    assert(alicePayloadsLength === 185)
+
+    // Pre-encryption at Alice site.
+    val (rdvOnion, rdvEphKey) = {
+      val sessionKeyAlice = randomKey
+      val rdvEphKey = blind(PublicKey(Crypto.curve.getG), sessionKeyAlice.value)
+      val fullOnion = PaymentPacket.create(sessionKeyAlice, Seq(m1, m2, alice).map(_.publicKey), alicePayloads, paymentHash, rdv = Some(bob.publicKey))
+      (fullOnion.packet.copy(payload = fullOnion.packet.payload.take(alicePayloadsLength)), rdvEphKey)
+    }
+
+    // Re-construct onion at Bob
+    val rdvSharedSecret = computeSharedSecret(rdvEphKey, bob)
+    val prefiller = generateStream(generateKey("prefill", rdvSharedSecret), PaymentPacket.PayloadLength)
+    val bobOnion = rdvOnion.copy(payload = (rdvOnion.payload ++ prefiller).take(PaymentPacket.PayloadLength))
+
+    // Decrypt at M1
+    val Right(packetM1) = PaymentPacket.peel(m1, paymentHash, bobOnion)
+    assert(packetM1.payload === alicePayloads.head)
+
+    // Decrypt at M2
+    val Right(packetM2) = PaymentPacket.peel(m2, paymentHash, packetM1.nextPacket)
+    assert(packetM2.payload === alicePayloads(1))
+
+    // Decrypt at Alice
+    val Right(packetAlice) = PaymentPacket.peel(alice, paymentHash, packetM2.nextPacket)
+    assert(packetAlice.payload === alicePayloads(2))
+    assert(packetAlice.isLastPacket)
   }
 
   /*
