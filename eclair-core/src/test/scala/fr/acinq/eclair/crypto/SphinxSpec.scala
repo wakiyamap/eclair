@@ -362,6 +362,31 @@ class SphinxSpec extends FunSuite {
       assert(failure === InvalidRealm)
     }
   }
+
+  test("blind route") {
+    val (blindedNodeIds, encryptedPayloads) = blindRoute(sessionKey, publicKeys, referenceVariableSizePayloads)
+
+    assert(blindedNodeIds.head === publicKeys.head)
+    val ephKey0 = sessionKey.publicKey
+    val (payload0, ephKey1) = decryptBlindedPayload(privKeys.head, ephKey0, encryptedPayloads.head)
+    assert(payload0 === referenceVariableSizePayloads.head)
+
+    assert(blindPrivateKey(privKeys(1), ephKey1).publicKey === blindedNodeIds(1))
+    val (payload1, ephKey2) = decryptBlindedPayload(privKeys(1), ephKey1, encryptedPayloads(1))
+    assert(payload1 === referenceVariableSizePayloads(1))
+
+    assert(blindPrivateKey(privKeys(2), ephKey2).publicKey === blindedNodeIds(2))
+    val (payload2, ephKey3) = decryptBlindedPayload(privKeys(2), ephKey2, encryptedPayloads(2))
+    assert(payload2 === referenceVariableSizePayloads(2))
+
+    assert(blindPrivateKey(privKeys(3), ephKey3).publicKey === blindedNodeIds(3))
+    val (payload3, ephKey4) = decryptBlindedPayload(privKeys(3), ephKey3, encryptedPayloads(3))
+    assert(payload3 === referenceVariableSizePayloads(3))
+
+    assert(blindPrivateKey(privKeys(4), ephKey4).publicKey === blindedNodeIds(4))
+    val (payload4, _) = decryptBlindedPayload(privKeys(4), ephKey4, encryptedPayloads(4))
+    assert(payload4 === referenceVariableSizePayloads(4))
+  }
 }
 
 object SphinxSpec {

@@ -81,6 +81,59 @@ object Sphinx extends Logging {
   }
 
   /**
+   * Blind the provided route and encrypt payloads.
+   *
+   * @param sessionKey this node's session key.
+   * @param publicKeys public keys of each node on the route, starting from the introduction point.
+   * @param payloads   payloads that should be encrypted for each node on the route.
+   * @return a tuple (blinded public keys, encrypted payloads)
+   */
+  def blindRoute(sessionKey: PrivateKey, publicKeys: Seq[PublicKey], payloads: Seq[ByteVector]): (Seq[PublicKey], Seq[ByteVector]) = {
+    require(publicKeys.length == payloads.length, "a payload must be provided for each node in the blinded path")
+    var e = sessionKey
+    val (blindedPublicKeys, encryptedPayloads) = publicKeys.zip(payloads).map { case (publicKey, payload) =>
+      val sharedSecret = computeSharedSecret(publicKey, e)
+      val blindedPublicKey = blind(publicKey, generateKey("blinded_node_id", sharedSecret))
+      val rho = generateKey("rho", sharedSecret)
+      // TODO: we should probably add the payment_hash in the additional data (maybe even things like cltv/fees?)
+      val (encryptedPayload, mac) = ChaCha20Poly1305.encrypt(rho, zeroes(12), payload, ByteVector.empty)
+      e = e.multiply(PrivateKey(Crypto.sha256(e.publicKey.value ++ sharedSecret.bytes)))
+      (blindedPublicKey, encryptedPayload ++ mac)
+    }.unzip
+    // The introduction point should not be blinded.
+    (publicKeys.head +: blindedPublicKeys.tail, encryptedPayloads)
+  }
+
+  /**
+   * Compute the blinded private key that must be used to decrypt an incoming blinded onion.
+   *
+   * @param privateKey   this node's private key.
+   * @param ephemeralKey unblinding ephemeral key.
+   * @return this node's blinded private key.
+   */
+  def blindPrivateKey(privateKey: PrivateKey, ephemeralKey: PublicKey): PrivateKey = {
+    val sharedSecret = computeSharedSecret(ephemeralKey, privateKey)
+    privateKey.multiply(PrivateKey(generateKey("blinded_node_id", sharedSecret)))
+  }
+
+  /**
+   * Decrypt the encrypted_blob onion tlv record that contains instructions to unblind the next node.
+   * TODO: handle errors
+   *
+   * @param privateKey       this node's private key.
+   * @param ephemeralKey     unblinding ephemeral key.
+   * @param encryptedPayload encrypted payload for this node.
+   * @return a tuple (decrypted payload, unblinding ephemeral key for the next node)
+   */
+  def decryptBlindedPayload(privateKey: PrivateKey, ephemeralKey: PublicKey, encryptedPayload: ByteVector): (ByteVector, PublicKey) = {
+    val sharedSecret = computeSharedSecret(ephemeralKey, privateKey)
+    val rho = generateKey("rho", sharedSecret)
+    val decrypted = ChaCha20Poly1305.decrypt(rho, zeroes(12), encryptedPayload.dropRight(16), ByteVector.empty, encryptedPayload.takeRight(16))
+    val nextEphKey = blind(ephemeralKey, computeBlindingFactor(ephemeralKey, sharedSecret))
+    (decrypted, nextEphKey)
+  }
+
+  /**
    * Peek at the first bytes of the per-hop payload to extract its length.
    */
   def peekPayloadLength(payload: ByteVector): Int = {

@@ -21,7 +21,7 @@ import fr.acinq.bitcoin.ByteVector32
 import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
 import fr.acinq.eclair.channel.{CMD_ADD_HTLC, Upstream}
 import fr.acinq.eclair.crypto.Sphinx
-import fr.acinq.eclair.router.{ChannelHop, Hop, NodeHop}
+import fr.acinq.eclair.router.{BlindedHop, ChannelHop, Hop, NodeHop}
 import fr.acinq.eclair.wire._
 import fr.acinq.eclair.{CltvExpiry, CltvExpiryDelta, Features, MilliSatoshi, UInt64, randomKey}
 import scodec.bits.ByteVector
@@ -44,7 +44,7 @@ object IncomingPacket {
   /** We are an intermediate node. */
   sealed trait RelayPacket extends IncomingPacket
   /** We must relay the payment to a direct peer. */
-  case class ChannelRelayPacket(add: UpdateAddHtlc, payload: Onion.ChannelRelayPayload, nextPacket: OnionRoutingPacket) extends RelayPacket {
+  case class ChannelRelayPacket(add: UpdateAddHtlc, payload: Onion.ChannelRelayPayload, nextPacket: OnionRoutingPacket, blindingKey: Option[PublicKey] = None) extends RelayPacket {
     val relayFeeMsat: MilliSatoshi = add.amountMsat - payload.amountToForward
     val expiryDelta: CltvExpiryDelta = add.cltvExpiry - payload.outgoingCltv
   }
@@ -85,10 +85,24 @@ object IncomingPacket {
    * @return whether the payment is to be relayed or if our node is the final recipient (or an error).
    */
   def decrypt(add: UpdateAddHtlc, privateKey: PrivateKey, features: ByteVector)(implicit log: LoggingAdapter): Either[FailureMessage, IncomingPacket] = {
-    decryptOnion(add, privateKey, features)(add.onionRoutingPacket, Sphinx.PaymentPacket) match {
+    val decryptionKey = add.tlvStream.get[OnionTlv.OutgoingNodeId] match {
+      case Some(OnionTlv.OutgoingNodeId(ephemeralKey)) => Sphinx.blindPrivateKey(privateKey, ephemeralKey)
+      case None => privateKey
+    }
+    decryptOnion(add, decryptionKey, features)(add.onionRoutingPacket, Sphinx.PaymentPacket) match {
       case Left(failure) => Left(failure)
       // NB: we don't validate the ChannelRelayPacket here because its fees and cltv depend on what channel we'll choose to use.
-      case Right(DecodedOnionPacket(payload: Onion.ChannelRelayPayload, next)) => Right(ChannelRelayPacket(add, payload, next))
+      case Right(DecodedOnionPacket(payload: Onion.ChannelRelayPayload, next)) => payload match {
+        case payload: Onion.BlindRelayPayload => payload.ephemeralKey.orElse(add.tlvStream.get[OnionTlv.OutgoingNodeId].map(_.nodeId)) match {
+          case Some(ephemeralKey) =>
+            // TODO: add error handling
+            val (decrypted, nextEphKey) = Sphinx.decryptBlindedPayload(privateKey, ephemeralKey, payload.encryptedStream)
+            val outgoingShortChannelId = OnionCodecs.tlvPerHopPayloadCodec.decode(decrypted.bits).require.value.get[OnionTlv.OutgoingChannelId].get.shortChannelId
+            Right(ChannelRelayPacket(add, Onion.RelayLegacyPayload(outgoingShortChannelId, payload.amountToForward, payload.outgoingCltv), next, Some(nextEphKey)))
+          case None => Left(InvalidOnionPayload(UInt64(8), 0))
+        }
+        case _ => Right(ChannelRelayPacket(add, payload, next))
+      }
       case Right(DecodedOnionPacket(payload: Onion.FinalLegacyPayload, _)) => validateFinal(add, payload)
       case Right(DecodedOnionPacket(payload: Onion.FinalTlvPayload, _)) => payload.records.get[OnionTlv.TrampolineOnion] match {
         case Some(OnionTlv.TrampolineOnion(trampolinePacket)) => decryptOnion(add, privateKey, features)(trampolinePacket, Sphinx.TrampolinePacket) match {
@@ -180,6 +194,11 @@ object OutgoingPacket {
           // Since we don't have any scenario where we add tlv data for intermediate hops, we use legacy payloads.
           case hop: ChannelHop => Onion.RelayLegacyPayload(hop.lastUpdate.shortChannelId, amount, expiry)
           case hop: NodeHop => Onion.createNodeRelayPayload(amount, expiry, hop.nextNodeId)
+          case hop: BlindedHop => hop.ephKey match {
+            // TODO: we probably need a dedicated TLV instead of OutgoingNodeId to provide the ephemeral key
+            case Some(ephKey) => Onion.BlindRelayPayload(TlvStream(OnionTlv.AmountToForward(amount), OnionTlv.OutgoingCltv(expiry), OnionTlv.EncryptedStream(hop.encryptedStream), OnionTlv.OutgoingNodeId(ephKey)))
+            case None => Onion.BlindRelayPayload(TlvStream(OnionTlv.AmountToForward(amount), OnionTlv.OutgoingCltv(expiry), OnionTlv.EncryptedStream(hop.encryptedStream)))
+          }
         }
         (amount + hop.fee(amount), expiry + hop.cltvExpiryDelta, payload +: payloads)
     }

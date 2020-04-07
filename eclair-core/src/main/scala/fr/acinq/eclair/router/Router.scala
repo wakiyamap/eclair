@@ -129,6 +129,20 @@ case class ChannelHop(nodeId: PublicKey, nextNodeId: PublicKey, lastUpdate: Chan
 }
 
 /**
+ * A directed hop between two blinded nodes.
+ *
+ * @param nodeId          id of the start node (blinded).
+ * @param nextNodeId      id the end node (blinded).
+ * @param encryptedStream encrypted stream to include in the onion payload.
+ * @param cltvExpiryDelta cltv expiry delta.
+ * @param fee             total fee for that node.
+ * @param ephKey          (optional) unblinding ephemeral key to include in the onion payload (only for the first blinded hop).
+ */
+case class BlindedHop(nodeId: PublicKey, nextNodeId: PublicKey, encryptedStream: ByteVector, cltvExpiryDelta: CltvExpiryDelta, fee: MilliSatoshi, ephKey: Option[PublicKey]) extends Hop {
+  override def fee(amount: MilliSatoshi): MilliSatoshi = fee
+}
+
+/**
  * A directed hop between two trampoline nodes.
  * These nodes need not be connected and we don't need to know a route between them.
  * The start node will compute the route to the end node itself when it receives our payment.

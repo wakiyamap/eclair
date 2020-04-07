@@ -144,6 +144,9 @@ object OnionTlv {
    */
   case class PaymentData(secret: ByteVector32, totalAmount: MilliSatoshi) extends OnionTlv
 
+  /** Encrypted tlv stream. */
+  case class EncryptedStream(enc: ByteVector) extends OnionTlv
+
   /** Id of the next node. */
   case class OutgoingNodeId(nodeId: PublicKey) extends OnionTlv
 
@@ -243,6 +246,14 @@ object Onion {
     override val outgoingChannelId = records.get[OutgoingChannelId].get.shortChannelId
   }
 
+  case class BlindRelayPayload(records: TlvStream[OnionTlv]) extends ChannelRelayPayload with TlvFormat {
+    override val amountToForward = records.get[AmountToForward].get.amount
+    override val outgoingCltv = records.get[OutgoingCltv].get.cltv
+    override val outgoingChannelId = ShortChannelId(0, 0, 0)
+    val encryptedStream = records.get[EncryptedStream].get.enc
+    val ephemeralKey = records.get[OutgoingNodeId].map(_.nodeId)
+  }
+
   case class NodeRelayPayload(records: TlvStream[OnionTlv]) extends RelayPayload with TlvFormat with TrampolinePacket {
     val amountToForward = records.get[AmountToForward].get.amount
     val outgoingCltv = records.get[OutgoingCltv].get.cltv
@@ -329,6 +340,8 @@ object OnionCodecs {
 
   private val paymentData: Codec[PaymentData] = variableSizeBytesLong(varintoverflow, ("payment_secret" | bytes32) :: ("total_msat" | tmillisatoshi)).as[PaymentData]
 
+  private val encryptedStream: Codec[EncryptedStream] = variableSizeBytesLong(varintoverflow, "encrypted_tlv" | bytes).as[EncryptedStream]
+
   private val outgoingNodeId: Codec[OutgoingNodeId] = variableSizeBytesLong(varintoverflow, "node_id" | publicKey).as[OutgoingNodeId]
 
   private val invoiceFeatures: Codec[InvoiceFeatures] = variableSizeBytesLong(varintoverflow, bytes).as[InvoiceFeatures]
@@ -342,6 +355,7 @@ object OnionCodecs {
     .typecase(UInt64(4), outgoingCltv)
     .typecase(UInt64(6), outgoingChannelId)
     .typecase(UInt64(8), paymentData)
+    .typecase(UInt64(10), encryptedStream)
     // Types below aren't specified - use cautiously when deploying (be careful with backwards-compatibility).
     .typecase(UInt64(66097), invoiceFeatures)
     .typecase(UInt64(66098), outgoingNodeId)
@@ -376,12 +390,16 @@ object OnionCodecs {
   val channelRelayPerHopPayloadCodec: Codec[ChannelRelayPayload] = fallback(tlvPerHopPayloadCodec, legacyRelayPerHopPayloadCodec).narrow({
     case Left(tlvs) if tlvs.get[AmountToForward].isEmpty => Attempt.failure(MissingRequiredTlv(UInt64(2)))
     case Left(tlvs) if tlvs.get[OutgoingCltv].isEmpty => Attempt.failure(MissingRequiredTlv(UInt64(4)))
-    case Left(tlvs) if tlvs.get[OutgoingChannelId].isEmpty => Attempt.failure(MissingRequiredTlv(UInt64(6)))
+    case Left(tlvs) if tlvs.get[OutgoingChannelId].isEmpty => tlvs.get[EncryptedStream] match {
+      case Some(_) => Attempt.successful(BlindRelayPayload(tlvs))
+      case None => Attempt.failure(MissingRequiredTlv(UInt64(6)))
+    }
     case Left(tlvs) => Attempt.successful(ChannelRelayTlvPayload(tlvs))
     case Right(legacy) => Attempt.successful(legacy)
   }, {
     case legacy: RelayLegacyPayload => Right(legacy)
     case ChannelRelayTlvPayload(tlvs) => Left(tlvs)
+    case BlindRelayPayload(tlvs) => Left(tlvs)
   })
 
   val nodeRelayPerHopPayloadCodec: Codec[NodeRelayPayload] = tlvPerHopPayloadCodec.narrow({
