@@ -16,7 +16,7 @@
 
 package fr.acinq.eclair.blockchain
 
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.{PrivateKey, PublicKey}
 import fr.acinq.bitcoin.{Satoshi, Transaction}
 import scodec.bits.ByteVector
 
@@ -33,7 +33,9 @@ trait EclairWallet {
 
   def getReceivePubkey(receiveAddress: Option[String] = None): Future[PublicKey]
 
-  def makeFundingTx(pubkeyScript: ByteVector, amount: Satoshi, feeRatePerKw: Long): Future[MakeFundingTxResponse]
+  def makeFundingTx(pubkeyScript: Array[Byte], amount: Satoshi, feeRatePerKw: Long): Future[MakeFundingTxResponse]
+
+  def makeFundingTx(pubkeyScript: ByteVector, amount: Satoshi, feeRatePerKw: Long): Future[MakeFundingTxResponse] = makeFundingTx(pubkeyScript.toArray, amount, feeRatePerKw)
 
   /**
    * Committing *must* include publishing the transaction on the network.

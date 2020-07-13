@@ -24,7 +24,7 @@ import akka.actor.Status.Failure
 import akka.testkit.{TestFSMRef, TestProbe}
 import com.google.common.net.HostAndPort
 import fr.acinq.bitcoin.{Btc, Script}
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.PublicKey
 import fr.acinq.eclair.FeatureSupport.Optional
 import fr.acinq.eclair.Features.{Wumbo, StaticRemoteKey}
 import fr.acinq.eclair.TestConstants._
@@ -40,6 +40,7 @@ import scodec.bits.{ByteVector, _}
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
+import fr.acinq.eclair.KotlinUtils._
 
 class PeerSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with StateTestsHelperMethods {
 
@@ -58,7 +59,7 @@ class PeerSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with StateTe
     val aliceParams = TestConstants.Alice.nodeParams
       .modify(_.features).setToIf(test.tags.contains("static_remotekey"))(Features(Set(ActivatedFeature(StaticRemoteKey, Optional))))
       .modify(_.features).setToIf(test.tags.contains("wumbo"))(Features(Set(ActivatedFeature(Wumbo, Optional))))
-      .modify(_.maxFundingSatoshis).setToIf(test.tags.contains("high-max-funding-satoshis"))(Btc(0.9))
+      .modify(_.maxFundingSatoshis).setToIf(test.tags.contains("high-max-funding-satoshis"))(Btc(0.9).toSatoshi)
       .modify(_.autoReconnect).setToIf(test.tags.contains("auto_reconnect"))(true)
 
     if (test.tags.contains("with_node_announcement")) {
@@ -231,7 +232,7 @@ class PeerSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with StateTe
     import f._
 
     val probe = TestProbe()
-    val fundingAmountBig = Channel.MAX_FUNDING + 10000.sat
+    val fundingAmountBig = Channel.MAX_FUNDING plus 10000.sat
     system.eventStream.subscribe(probe.ref, classOf[ChannelCreated])
     connect(remoteNodeId, peer, peerConnection)
 
@@ -245,7 +246,7 @@ class PeerSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with StateTe
     import f._
 
     val probe = TestProbe()
-    val fundingAmountBig = Channel.MAX_FUNDING + 10000.sat
+    val fundingAmountBig = Channel.MAX_FUNDING plus 10000.sat
     system.eventStream.subscribe(probe.ref, classOf[ChannelCreated])
     connect(remoteNodeId, peer, peerConnection) // Bob doesn't support wumbo, Alice does
 

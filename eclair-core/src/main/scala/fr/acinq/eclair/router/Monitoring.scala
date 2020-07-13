@@ -21,6 +21,7 @@ import fr.acinq.eclair.wire.ChannelUpdate
 import fr.acinq.eclair.{LongToBtcAmount, MilliSatoshi, getSimpleClassName}
 import kamon.Kamon
 import kamon.metric.{Counter, MeasurementUnit}
+import fr.acinq.eclair.KotlinUtils._
 
 object Monitoring {
 

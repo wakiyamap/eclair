@@ -18,7 +18,7 @@ package fr.acinq.eclair.db
 
 import java.util.UUID
 
-import fr.acinq.bitcoin.Crypto.PrivateKey
+import fr.acinq.bitcoin.PrivateKey
 import fr.acinq.bitcoin.{Block, ByteVector32, Crypto}
 import fr.acinq.eclair.TestConstants.{TestPgDatabases, TestSqliteDatabases, forAllDbs}
 import fr.acinq.eclair.crypto.Sphinx
@@ -62,7 +62,7 @@ class SqlitePaymentsDbSpec extends AnyFunSuite {
         //  - the monolithic payments table has been replaced by two tables, received_payments and sent_payments
         //  - old records from the payments table are ignored (not migrated to the new tables)
         using(connection.prepareStatement("INSERT INTO payments VALUES (?, ?, ?)")) { statement =>
-          statement.setBytes(1, paymentHash1.toArray)
+          statement.setBytes(1, paymentHash1.toByteArray)
           statement.setLong(2, (123 msat).toLong)
           statement.setLong(3, 1000) // received_at
           statement.executeUpdate()
@@ -122,9 +122,9 @@ class SqlitePaymentsDbSpec extends AnyFunSuite {
         val id1 = UUID.randomUUID()
         val id2 = UUID.randomUUID()
         val id3 = UUID.randomUUID()
-        val ps1 = OutgoingPayment(id1, id1, None, randomBytes32, PaymentType.Standard, 561 msat, 561 msat, PrivateKey(ByteVector32.One).publicKey, 1000, None, OutgoingPaymentStatus.Pending)
-        val ps2 = OutgoingPayment(id2, id2, None, randomBytes32, PaymentType.Standard, 1105 msat, 1105 msat, PrivateKey(ByteVector32.One).publicKey, 1010, None, OutgoingPaymentStatus.Failed(Nil, 1050))
-        val ps3 = OutgoingPayment(id3, id3, None, paymentHash1, PaymentType.Standard, 1729 msat, 1729 msat, PrivateKey(ByteVector32.One).publicKey, 1040, None, OutgoingPaymentStatus.Succeeded(preimage1, 0 msat, Nil, 1060))
+        val ps1 = OutgoingPayment(id1, id1, None, randomBytes32, PaymentType.Standard, 561 msat, 561 msat, new PrivateKey(ByteVector32.One).publicKey, 1000, None, OutgoingPaymentStatus.Pending)
+        val ps2 = OutgoingPayment(id2, id2, None, randomBytes32, PaymentType.Standard, 1105 msat, 1105 msat, new PrivateKey(ByteVector32.One).publicKey, 1010, None, OutgoingPaymentStatus.Failed(Nil, 1050))
+        val ps3 = OutgoingPayment(id3, id3, None, paymentHash1, PaymentType.Standard, 1729 msat, 1729 msat, new PrivateKey(ByteVector32.One).publicKey, 1040, None, OutgoingPaymentStatus.Succeeded(preimage1, 0 msat, Nil, 1060))
         val i1 = PaymentRequest(Block.TestnetGenesisBlock.hash, Some(12345678 msat), paymentHash1, davePriv, "Some invoice", expirySeconds = None, timestamp = 1)
         val pr1 = IncomingPayment(i1, preimage1, PaymentType.Standard, i1.timestamp.seconds.toMillis, IncomingPaymentStatus.Received(12345678 msat, 1090))
         val i2 = PaymentRequest(Block.TestnetGenesisBlock.hash, Some(12345678 msat), paymentHash2, carolPriv, "Another invoice", expirySeconds = Some(30), timestamp = 1)
@@ -140,7 +140,7 @@ class SqlitePaymentsDbSpec extends AnyFunSuite {
 
         using(connection.prepareStatement("INSERT INTO sent_payments (id, payment_hash, amount_msat, created_at, status) VALUES (?, ?, ?, ?, ?)")) { statement =>
           statement.setString(1, ps1.id.toString)
-          statement.setBytes(2, ps1.paymentHash.toArray)
+          statement.setBytes(2, ps1.paymentHash.toByteArray)
           statement.setLong(3, ps1.amount.toLong)
           statement.setLong(4, ps1.createdAt)
           statement.setString(5, "PENDING")
@@ -149,7 +149,7 @@ class SqlitePaymentsDbSpec extends AnyFunSuite {
 
         using(connection.prepareStatement("INSERT INTO sent_payments (id, payment_hash, amount_msat, created_at, completed_at, status) VALUES (?, ?, ?, ?, ?, ?)")) { statement =>
           statement.setString(1, ps2.id.toString)
-          statement.setBytes(2, ps2.paymentHash.toArray)
+          statement.setBytes(2, ps2.paymentHash.toByteArray)
           statement.setLong(3, ps2.amount.toLong)
           statement.setLong(4, ps2.createdAt)
           statement.setLong(5, ps2.status.asInstanceOf[OutgoingPaymentStatus.Failed].completedAt)
@@ -159,8 +159,8 @@ class SqlitePaymentsDbSpec extends AnyFunSuite {
 
         using(connection.prepareStatement("INSERT INTO sent_payments (id, payment_hash, preimage, amount_msat, created_at, completed_at, status) VALUES (?, ?, ?, ?, ?, ?, ?)")) { statement =>
           statement.setString(1, ps3.id.toString)
-          statement.setBytes(2, ps3.paymentHash.toArray)
-          statement.setBytes(3, ps3.status.asInstanceOf[OutgoingPaymentStatus.Succeeded].paymentPreimage.toArray)
+          statement.setBytes(2, ps3.paymentHash.toByteArray)
+          statement.setBytes(3, ps3.status.asInstanceOf[OutgoingPaymentStatus.Succeeded].paymentPreimage.toByteArray)
           statement.setLong(4, ps3.amount.toLong)
           statement.setLong(5, ps3.createdAt)
           statement.setLong(6, ps3.status.asInstanceOf[OutgoingPaymentStatus.Succeeded].completedAt)
@@ -173,8 +173,8 @@ class SqlitePaymentsDbSpec extends AnyFunSuite {
         //  - made expire_at not null
 
         using(connection.prepareStatement("INSERT INTO received_payments (payment_hash, preimage, payment_request, received_msat, created_at, received_at) VALUES (?, ?, ?, ?, ?, ?)")) { statement =>
-          statement.setBytes(1, i1.paymentHash.toArray)
-          statement.setBytes(2, pr1.paymentPreimage.toArray)
+          statement.setBytes(1, i1.paymentHash.toByteArray)
+          statement.setBytes(2, pr1.paymentPreimage.toByteArray)
           statement.setString(3, PaymentRequest.write(i1))
           statement.setLong(4, pr1.status.asInstanceOf[IncomingPaymentStatus.Received].amount.toLong)
           statement.setLong(5, pr1.createdAt)
@@ -183,8 +183,8 @@ class SqlitePaymentsDbSpec extends AnyFunSuite {
         }
 
         using(connection.prepareStatement("INSERT INTO received_payments (payment_hash, preimage, payment_request, created_at, expire_at) VALUES (?, ?, ?, ?, ?)")) { statement =>
-          statement.setBytes(1, i2.paymentHash.toArray)
-          statement.setBytes(2, pr2.paymentPreimage.toArray)
+          statement.setBytes(1, i2.paymentHash.toByteArray)
+          statement.setBytes(2, pr2.paymentPreimage.toByteArray)
           statement.setString(3, PaymentRequest.write(i2))
           statement.setLong(4, pr2.createdAt)
           statement.setLong(5, (i2.timestamp + i2.expiry.get).seconds.toMillis)
@@ -260,9 +260,9 @@ class SqlitePaymentsDbSpec extends AnyFunSuite {
           statement.setString(1, ps1.id.toString)
           statement.setString(2, ps1.parentId.toString)
           statement.setString(3, ps1.externalId.get)
-          statement.setBytes(4, ps1.paymentHash.toArray)
+          statement.setBytes(4, ps1.paymentHash.toByteArray)
           statement.setLong(5, ps1.amount.toLong)
-          statement.setBytes(6, ps1.recipientNodeId.value.toArray)
+          statement.setBytes(6, ps1.recipientNodeId.value.toByteArray)
           statement.setLong(7, ps1.createdAt)
           statement.setLong(8, ps1.status.asInstanceOf[OutgoingPaymentStatus.Failed].completedAt)
           statement.setBytes(9, SqlitePaymentsDb.paymentFailuresCodec.encode(ps1.status.asInstanceOf[OutgoingPaymentStatus.Failed].failures.toList).require.toByteArray)
@@ -273,9 +273,9 @@ class SqlitePaymentsDbSpec extends AnyFunSuite {
           statement.setString(1, ps2.id.toString)
           statement.setString(2, ps2.parentId.toString)
           statement.setString(3, ps2.externalId.get)
-          statement.setBytes(4, ps2.paymentHash.toArray)
+          statement.setBytes(4, ps2.paymentHash.toByteArray)
           statement.setLong(5, ps2.amount.toLong)
-          statement.setBytes(6, ps2.recipientNodeId.value.toArray)
+          statement.setBytes(6, ps2.recipientNodeId.value.toByteArray)
           statement.setLong(7, ps2.createdAt)
           statement.setString(8, PaymentRequest.write(invoice1))
           statement.executeUpdate()
@@ -284,12 +284,12 @@ class SqlitePaymentsDbSpec extends AnyFunSuite {
         using(connection.prepareStatement("INSERT INTO sent_payments (id, parent_id, payment_hash, amount_msat, target_node_id, created_at, completed_at, payment_preimage, fees_msat, payment_route) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")) { statement =>
           statement.setString(1, ps3.id.toString)
           statement.setString(2, ps3.parentId.toString)
-          statement.setBytes(3, ps3.paymentHash.toArray)
+          statement.setBytes(3, ps3.paymentHash.toByteArray)
           statement.setLong(4, ps3.amount.toLong)
-          statement.setBytes(5, ps3.recipientNodeId.value.toArray)
+          statement.setBytes(5, ps3.recipientNodeId.value.toByteArray)
           statement.setLong(6, ps3.createdAt)
           statement.setLong(7, ps3.status.asInstanceOf[OutgoingPaymentStatus.Succeeded].completedAt)
-          statement.setBytes(8, ps3.status.asInstanceOf[OutgoingPaymentStatus.Succeeded].paymentPreimage.toArray)
+          statement.setBytes(8, ps3.status.asInstanceOf[OutgoingPaymentStatus.Succeeded].paymentPreimage.toByteArray)
           statement.setLong(9, ps3.status.asInstanceOf[OutgoingPaymentStatus.Succeeded].feesPaid.toLong)
           statement.setBytes(10, SqlitePaymentsDb.paymentRouteCodec.encode(ps3.status.asInstanceOf[OutgoingPaymentStatus.Succeeded].route.toList).require.toByteArray)
           statement.executeUpdate()
@@ -510,5 +510,5 @@ object SqlitePaymentsDbSpec {
   val hop_ab = ChannelHop(alice, bob, ChannelUpdate(randomBytes64, randomBytes32, ShortChannelId(42), 1, 0, 0, CltvExpiryDelta(12), 1 msat, 1 msat, 1, None))
   val hop_bc = NodeHop(bob, carol, CltvExpiryDelta(14), 1 msat)
   val (preimage1, preimage2, preimage3, preimage4) = (randomBytes32, randomBytes32, randomBytes32, randomBytes32)
-  val (paymentHash1, paymentHash2, paymentHash3, paymentHash4) = (Crypto.sha256(preimage1), Crypto.sha256(preimage2), Crypto.sha256(preimage3), Crypto.sha256(preimage4))
+  val (paymentHash1, paymentHash2, paymentHash3, paymentHash4) = (new ByteVector32(Crypto.sha256(preimage1)), new ByteVector32(Crypto.sha256(preimage2)), new ByteVector32(Crypto.sha256(preimage3)), new ByteVector32(Crypto.sha256(preimage4)))
 }

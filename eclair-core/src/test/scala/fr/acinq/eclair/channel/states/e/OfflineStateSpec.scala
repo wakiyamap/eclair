@@ -20,7 +20,7 @@ import java.util.UUID
 
 import akka.actor.Status
 import akka.testkit.{TestActorRef, TestProbe}
-import fr.acinq.bitcoin.Crypto.PrivateKey
+import fr.acinq.bitcoin.PrivateKey
 import fr.acinq.bitcoin.{ByteVector32, ScriptFlags, Transaction}
 import fr.acinq.eclair.TestConstants.{Alice, TestFeeEstimator}
 import fr.acinq.eclair.blockchain._
@@ -35,6 +35,7 @@ import org.scalatest.funsuite.FixtureAnyFunSuiteLike
 import org.scalatest.{Outcome, Tag}
 
 import scala.concurrent.duration._
+import fr.acinq.eclair.KotlinUtils._
 
 /**
  * Created by PM on 05/07/2016.
@@ -96,9 +97,9 @@ class OfflineStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with
       aliceCommitments.localCommit.index)
 
     // a didn't receive any update or sig
-    val ab_reestablish = alice2bob.expectMsg(ChannelReestablish(ab_add_0.channelId, 1, 0, PrivateKey(ByteVector32.Zeroes), aliceCurrentPerCommitmentPoint))
+    val ab_reestablish = alice2bob.expectMsg(ChannelReestablish(ab_add_0.channelId, 1, 0, new PrivateKey(ByteVector32.Zeroes), aliceCurrentPerCommitmentPoint))
     // b didn't receive the sig
-    val ba_reestablish = bob2alice.expectMsg(ChannelReestablish(ab_add_0.channelId, 1, 0, PrivateKey(ByteVector32.Zeroes), bobCurrentPerCommitmentPoint))
+    val ba_reestablish = bob2alice.expectMsg(ChannelReestablish(ab_add_0.channelId, 1, 0, new PrivateKey(ByteVector32.Zeroes), bobCurrentPerCommitmentPoint))
 
     // reestablish ->b
     alice2bob.forward(bob, ab_reestablish)
@@ -183,9 +184,9 @@ class OfflineStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with
       aliceCommitments.localCommit.index)
 
     // a didn't receive the sig
-    val ab_reestablish = alice2bob.expectMsg(ChannelReestablish(ab_add_0.channelId, 1, 0, PrivateKey(ByteVector32.Zeroes), aliceCurrentPerCommitmentPoint))
+    val ab_reestablish = alice2bob.expectMsg(ChannelReestablish(ab_add_0.channelId, 1, 0, new PrivateKey(ByteVector32.Zeroes), aliceCurrentPerCommitmentPoint))
     // b did receive the sig
-    val ba_reestablish = bob2alice.expectMsg(ChannelReestablish(ab_add_0.channelId, 2, 0, PrivateKey(ByteVector32.Zeroes), bobCurrentPerCommitmentPoint))
+    val ba_reestablish = bob2alice.expectMsg(ChannelReestablish(ab_add_0.channelId, 2, 0, new PrivateKey(ByteVector32.Zeroes), bobCurrentPerCommitmentPoint))
 
     // reestablish ->b
     alice2bob.forward(bob, ab_reestablish)

@@ -50,7 +50,7 @@ class ThroughputSpec extends AnyFunSuite {
       def run(h2r: Map[ByteVector32, ByteVector32]): Receive = {
         case ('add, tgt: ActorRef) =>
           val r = randomBytes32
-          val h = Crypto.sha256(r)
+          val h = new ByteVector32(Crypto.sha256(r))
           tgt ! CMD_ADD_HTLC(1 msat, h, CltvExpiry(1), TestConstants.emptyOnionPacket, Upstream.Local(UUID.randomUUID()))
           context.become(run(h2r + (h -> r)))
 

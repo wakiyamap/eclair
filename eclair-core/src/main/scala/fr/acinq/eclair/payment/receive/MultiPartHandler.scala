@@ -19,7 +19,8 @@ package fr.acinq.eclair.payment.receive
 import akka.actor.Actor.Receive
 import akka.actor.{ActorContext, ActorRef, PoisonPill, Status}
 import akka.event.{DiagnosticLoggingAdapter, LoggingAdapter}
-import fr.acinq.bitcoin.{ByteVector32, Crypto}
+import fr.acinq.bitcoin.{ByteVector32}
+import fr.acinq.bitcoin.Crypto
 import fr.acinq.eclair.channel.{CMD_FAIL_HTLC, CMD_FULFILL_HTLC, Channel, ChannelCommandResponse}
 import fr.acinq.eclair.db._
 import fr.acinq.eclair.payment.Monitoring.{Metrics, Tags}
@@ -38,6 +39,8 @@ import scala.util.{Failure, Success, Try}
 class MultiPartHandler(nodeParams: NodeParams, register: ActorRef, db: IncomingPaymentsDb) extends ReceiveHandler {
 
   import MultiPartHandler._
+
+  implicit def bytearray2bytevector32(input: Array[Byte]): ByteVector32 = new ByteVector32(input)
 
   // NB: this is safe because this handler will be called from within an actor
   private var pendingPayments: Map[ByteVector32, (ByteVector32, ActorRef)] = Map.empty

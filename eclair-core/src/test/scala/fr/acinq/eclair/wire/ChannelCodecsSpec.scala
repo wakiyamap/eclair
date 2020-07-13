@@ -21,9 +21,7 @@ import java.util.UUID
 
 import akka.actor.ActorSystem
 import com.google.common.net.HostAndPort
-import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
-import fr.acinq.bitcoin.DeterministicWallet.KeyPath
-import fr.acinq.bitcoin.{Block, ByteVector32, ByteVector64, Crypto, DeterministicWallet, OutPoint, Satoshi, Script, Transaction}
+import fr.acinq.bitcoin.{Block, ByteVector32, ByteVector64, Crypto, DeterministicWallet, Hex, KeyPath, OutPoint, PrivateKey, PublicKey, Satoshi, Script, Transaction, ByteVector => ByteVectorAcinq}
 import fr.acinq.eclair.channel.Helpers.Funding
 import fr.acinq.eclair.channel._
 import fr.acinq.eclair.crypto.{LocalKeyManager, ShaChain}
@@ -45,6 +43,8 @@ import scodec.{Attempt, Codec, DecodeResult}
 import scala.concurrent.duration._
 import scala.io.Source
 import scala.util.Random
+import scala.jdk.CollectionConverters._
+import fr.acinq.eclair.KotlinUtils._
 
 /**
  * Created by PM on 31/05/2016.
@@ -53,16 +53,18 @@ import scala.util.Random
 class ChannelCodecsSpec extends AnyFunSuite {
 
   import ChannelCodecsSpec._
+  implicit def bytevarray2bytevector(input: Array[Byte]) : ByteVector = ByteVector.view(input)
+  implicit def long2atoshi(input: Long): Satoshi = new Satoshi(input)
 
   test("encode/decode key paths (all 0s)") {
-    val keyPath = KeyPath(Seq(0L, 0L, 0L, 0L))
+    val keyPath = new KeyPath("0/0/0/0")
     val encoded = keyPathCodec.encode(keyPath).require
     val decoded = keyPathCodec.decode(encoded).require
     assert(keyPath === decoded.value)
   }
 
   test("encode/decode key paths (all 1s)") {
-    val keyPath = KeyPath(Seq(0xffffffffL, 0xffffffffL, 0xffffffffL, 0xffffffffL))
+    val keyPath = new KeyPath(com.google.common.collect.Lists.newArrayList[java.lang.Long](0xffffffffL.toLong, 0xffffffffL.toLong, 0xffffffffL.toLong, 0xffffffffL.toLong))
     val encoded = keyPathCodec.encode(keyPath).require
     val decoded = keyPathCodec.decode(encoded).require
     assert(keyPath === decoded.value)
@@ -110,18 +112,18 @@ class ChannelCodecsSpec extends AnyFunSuite {
 
     val o = LocalParams(
       nodeId = randomKey.publicKey,
-      fundingKeyPath = DeterministicWallet.KeyPath(Seq(42L)),
-      dustLimit = Satoshi(Random.nextInt(Int.MaxValue)),
+      fundingKeyPath = new KeyPath("42"),
+      dustLimit = new Satoshi(Random.nextInt(Int.MaxValue)),
       maxHtlcValueInFlightMsat = UInt64(Random.nextInt(Int.MaxValue)),
-      channelReserve = Satoshi(Random.nextInt(Int.MaxValue)),
+      channelReserve = new Satoshi(Random.nextInt(Int.MaxValue)),
       htlcMinimum = MilliSatoshi(Random.nextInt(Int.MaxValue)),
       toSelfDelay = CltvExpiryDelta(Random.nextInt(Short.MaxValue)),
       maxAcceptedHtlcs = Random.nextInt(Short.MaxValue),
-      defaultFinalScriptPubKey = Script.write(Script.pay2wpkh(PrivateKey(randomBytes32).publicKey)),
+      defaultFinalScriptPubKey = Script.write(Script.pay2wpkh(new PrivateKey(randomBytes32).publicKey)),
       staticPaymentBasepoint = None,
       isFunder = Random.nextBoolean(),
       features = Features(randomBytes(256)))
-    val o1 = o.copy(staticPaymentBasepoint = Some(PrivateKey(randomBytes32).publicKey))
+    val o1 = o.copy(staticPaymentBasepoint = Some(new PrivateKey(randomBytes32).publicKey))
 
     roundtrip(o, localParamsCodec(ChannelVersion.ZEROES))
     roundtrip(o1, localParamsCodec(ChannelVersion.STATIC_REMOTEKEY))
@@ -137,9 +139,9 @@ class ChannelCodecsSpec extends AnyFunSuite {
   test("encode/decode remoteparams") {
     val o = RemoteParams(
       nodeId = randomKey.publicKey,
-      dustLimit = Satoshi(Random.nextInt(Int.MaxValue)),
+      dustLimit = new Satoshi(Random.nextInt(Int.MaxValue)),
       maxHtlcValueInFlightMsat = UInt64(Random.nextInt(Int.MaxValue)),
-      channelReserve = Satoshi(Random.nextInt(Int.MaxValue)),
+      channelReserve = new Satoshi(Random.nextInt(Int.MaxValue)),
       htlcMinimum = MilliSatoshi(Random.nextInt(Int.MaxValue)),
       toSelfDelay = CltvExpiryDelta(Random.nextInt(Short.MaxValue)),
       maxAcceptedHtlcs = Random.nextInt(Short.MaxValue),
@@ -182,16 +184,16 @@ class ChannelCodecsSpec extends AnyFunSuite {
     val encodedHtlc2 = hex"09d5618930919bd77c07ea3931e7791010a9637c3d06e091b2dad38f21bbcffa00000000384ffa48000000003dbf35101f8724fbd36096ea5f462be20d20bc2f93ebc2c8a3f00b7a78c5158b5a0e9f6b1666923e800f1d073e2adcfba5904f1b8234af1c43a6e84a862a044d15f33addf8d41b3cfb7f96d815d2248322aeadd0ce7bacbcc44e611f66c35c439423c099e678c077203d5fc415ec37b798c6c74c9eed0806e6cb20f2b613855772c086cee60642b3b9c3919627c877a62a57dcf6ce003bedc53a8b7a0d7aa91b2304ef8b512fe1a9a043e410d7cd3009edffcb5d4c05cfb545aced4afea8bbe26c5ff492602edf9d4eb731541e60e48fd1ae5e33b04a614346fb16e09ccd9bcb8907fe9fc287757ea9280a03462299e950a274c1dc53fbae8c421e67d7de35709eda0f11bcd417c0f215667e8b8ccae1035d0281214af25bf690102b180e5d4b57323d02ab5cee5d3669b4300539d02eff553143f085cd70e5428b7af3262418aa7664d56c3fd29c00a2f88a6a5ee9685f45b6182c45d492b2170b092e4b5891247bcffe82623b86637bec291cca1dc729f5747d842ecdf2fc24eaf95c522cbebe9a841e7cff837e715b689f0b366b92a2850875636962ba42863ab6df12ee938ada6e6ae795f8b4fbe81adea478caa9899fed0d6ccdf7a2173b69b2d3ff1b93c82c08c4da63b426d2f94912109997e8ee5830c5ffe3b60c97438ae1521a2956e73a9a60f16dc13a5e6565904e04bf66ceda3db693fc7a0c6ad4f7dc8cb7f1ef54527c11589b7c35ce5b20e7f23a0ab107a406fa747435ff08096a7533a8ab7f5d3630d5c20c9161101f922c76079497e00e3ca62bce033b2bb065ea1733c50b5a06492d2b46715812003f29a8754b5dc1649082893e7be76550c58d98e81556e4ddf20a244f363bc23e756c95224335d0eeccd3da06a9161c4c72ae3d93afe902a806eadd2167d15c04cf3028fc61d0843bd270fd702a2c5af889ab5bc79a294847914f8dd409a9b990a96397d9046c385ca9810fb7c7b2c61491c67264257a601be7fe8c47a859b56af41caf06be7ea1cdb540719fc3bc2603675b79fd36a6f2911043b78da9f186d2a01f1209d0d91508e8ebecce09fd72823d0c166542f6d059fa8725d9d719a2532289c88f7a291a6bbe01f5b1f83cc2232d716f7dfc6a103fb8637d759aab939aaa278cffe04a64f4142564113080276bee7d3ec62e3f887838e3821f0dd713337972df994160edc29ccb9b9630c41a9ec7c994cbef2501a610e1c3684e697df230fd6f6f10526c9446e8307a1fb7e4988cdf7fc8aa32c8a09206113d8247aaae42e3942c0ffd291d67837d2c88231c85882667582eca1d2566134c4ee1301de8e1637f09467b473ba3e353992488048bd34b26dcc6f6f474751b7ac5bbad468c64eda2aeabfe6a92150a4faab142229d7934c4a24427441850d0deae5db802b02940435f39ceaa85e2d3d2269510881ab26926c3167487aa138d38b9cf650f59f0aa0b84297479271c2009cde61e5c58c26bf8a15aba86869af83941ec14972d93b6ae4a6ecf6584238150a61487d6bd394db40a10d710fd2d065850e52ea6536a74d88947448221c1ce493fecbf2070998e04d5263935488c2935f2d3afed4d0fc7472c03e652f928e6a18f78029043f219f652d992e104529149a978e5c660c0081fe6a179dbe62dcb597f3b4e497c6049b0255f8f306e4b18c97c339c98270abf86a4eb1af93b14d880eeda203bb3ba5b6e3113d0e003f8e55f3d446bd4dcda686b357ca0adf1fe25390767a40ff086a9258d04c19b0474488aaafac321f087d2bd0dc0e056ad9f5b5afa5f3d82bc3f18b33de9044529637fed05879f6bd440f331c06008dd38c2fb822c22fc4201e97f9ef9fc351807c045dece147d19fd01a68604c3cb6b5e0db1b4d1ebe387670021067d94206fbdc9ed33ac1f49d87f961cb5d44f48805e55f8637ca3de4ec9dd969944ed61de45970b7ef96d9f313a41de1cae380e0fe4b56729f275e2a0a87403c90e80"
 
     val ref = UpdateAddHtlc(
-      ByteVector32(hex"13aac312612337aef80fd47263cef2202152c6f87a0dc12365b5a71e43779ff4"),
+      new ByteVector32("13aac312612337aef80fd47263cef2202152c6f87a0dc12365b5a71e43779ff4"),
       1889531024,
       2071882272 msat,
-      ByteVector32(hex"3f0e49f7a6c12dd4be8c57c41a41785f27d7859147e016f4f18a2b16b41d3ed6"),
+      new ByteVector32("3f0e49f7a6c12dd4be8c57c41a41785f27d7859147e016f4f18a2b16b41d3ed6"),
       CltvExpiry(751641725),
       OnionRoutingPacket(
         0,
         hex"1e3a0e7c55b9f74b209e3704695e38874dd0950c54089a2be675bbf1a83679f6ff",
         hex"2db02ba44906455d5ba19cf75979889cc23ecd86b88728478133ccf180ee407abf882bd86f6f318d8e993dda100dcd9641e56c270aaee5810d9dcc0c85677387232c4f90ef4c54afb9ed9c0077db8a7516f41af552364609df16a25fc3534087c821af9a6013dbff96ba980b9f6a8b59da95fd5177c4d8bfe924c05dbf3a9d6e62a83cc1c91fa35cbc676094c2868df62dc1399b3797120ffd3f850eeafd525014068c4533d2a144e983b8a7f75d18843ccfafbc6ae13db41e2379a82f81e42accfd171995c206ba05024295e4b7ed202056301cba96ae647a0556b9dcba6cd368600a73a05dfeaa6287e10b9ae1ca8516f5e64c483154ecc9aad87fa5380145f114d4bdd2d0be8b6c30588ba925642e16125c96b12248f79ffd04c4770cc6f7d85239943b8e53eae8fb085d9be5f849d5f2b8a4597d7d35083cf9ff06fce2b6d13e166cd725450a10eac6d2c574850c756dbe25dd2715b4dcd5cf2bf169f7d035bd48f19553133fda1ad99bef442e76d365a7fe372790581189b4c7684da5f2922421332fd1dcb0618bffc76c192e8715c2a43452adce7534c1e2db8274bccacb209c097ecd9db47b6d27f8f418d5a9efb9196fe3dea8a4f822b136f86b9cb641cfe47415620f480df4e8e86bfe1012d4ea675156feba6c61ab841922c2203f2458ec0f292fc01c794c579c06765760cbd42e678a16b40c925a568ce2b024007e5350ea96bb82c92105127cf7cecaa18b1b31d02aadc9bbe414489e6c77847cead92a44866ba1dd99a7b40d522c3898e55c7b275fd205500dd5ba42cfa2b8099e6051f8c3a10877a4e1fae05458b5f11356b78f3452908f229f1ba81353732152c72fb208d870b953021f6f8f658c29238ce4c84af4c037cffd188f50b36ad5e8395e0d7cfd439b6a80e33f87784c06ceb6f3fa6d4de52220876f1b53e30da5403e2413a1b22a11d1d7d99c13fae5047a182cca85eda0b3f50e4bb3ae3344a64513911ef45234d77c03eb63f07984465ae2defbf8d4207f70c6faeb35572735544f19ffc094c9e8284ac82261004ed7dcfa7d8c5c7f10f071c7043e1bae2666f2e5bf3282c1db853997372c6188353d8f932997de4a034c21c386d09cd2fbe461fadede20a4d9288dd060f43f6fc93119beff9154659141240c227b048f555c85c728581ffa523acf06fa591046390b104cceb05d943a4acc26989dc2603bd1c2c6fe128cf68e7747c6a73249100917a6964db98dede8e8ea36f58b775a8d18c9db455d57fcd5242a149f556284453af2698944884e8830a1a1bd5cbb700560528086be739d550bc5a7a44d2a21103564d24d862ce90f54271a71739eca1eb3e154170852e8f24e3840139bcc3cb8b184d7f142b5750d0d35f07283d8292e5b276d5c94dd9ecb084702a14c290fad7a729b681421ae21fa5a0cb0a1ca5d4ca6d4e9b1128e890443839c927fd97e40e1331c09aa4c726a9118526be5a75fda9a1f8e8e5807cca5f251cd431ef0052087e433eca5b325c208a5229352f1cb8cc180103fcd42f3b7cc5b96b2fe769c92f8c093604abf1e60dc963192f86739304e157f0d49d635f27629b101ddb440776774b6dc6227a1c007f1cabe7a88d7a9b9b4d0d66af9415be3fc4a720ecf481fe10d524b1a09833608e8911555f58643e10fa57a1b81c0ad5b3eb6b5f4be7b05787e31667bd2088a52c6ffda0b0f3ed7a881e66380c011ba7185f7045845f88403d2ff3df3f86a300f808bbd9c28fa33fa034d0c098796d6bc1b6369a3d7c70ece00420cfb2840df7b93da67583e93b0ff2c396ba89e9100bcabf0c6f947bc9d93bb2d3289",
-        ByteVector32(hex"dac3bc8b2e16fdf2db3e627483bc395c701c1fc96ace53e4ebc54150e807921d"))
+        new ByteVector32("dac3bc8b2e16fdf2db3e627483bc395c701c1fc96ace53e4ebc54150e807921d"))
     )
     val remaining = bin"0000000" // 7 bits remainder because the direction is encoded with 1 bit and we are dealing with bytes
 
@@ -263,10 +265,10 @@ class ChannelCodecsSpec extends AnyFunSuite {
 
   test("encode/decode map of spending txes") {
     val map = Map(
-      OutPoint(randomBytes32, 42) -> randomBytes32,
-      OutPoint(randomBytes32, 14502) -> randomBytes32,
-      OutPoint(randomBytes32, 0) -> randomBytes32,
-      OutPoint(randomBytes32, 454513) -> randomBytes32
+      new OutPoint(randomBytes32, 42) -> randomBytes32,
+      new OutPoint(randomBytes32, 14502) -> randomBytes32,
+      new OutPoint(randomBytes32, 0) -> randomBytes32,
+      new OutPoint(randomBytes32, 454513) -> randomBytes32
     )
     assert(spentMapCodec.decodeValue(spentMapCodec.encode(map).require).require === map)
   }
@@ -284,19 +286,19 @@ class ChannelCodecsSpec extends AnyFunSuite {
     val c = ChannelCodecs.stateDataCodec.decode(bin.toBitVector).require.value
 
     val ref = Seq(
-      (hex"30440220104aed8d52fe50e2313a9a456607838a0cdac75fdc37afe581c415e7a20da944022034d1ac69c64f34571251be8cc6b50116f26453813267fb9afa3e318a79f4f32401", hex"304502210097fcda40b22916b5d61badedf6126658c2b5927d5002cc2c3e5f88a78ba5f45b02204a74bcf8827d894cab153fc051f39d8e2aeb660162a6a05797f7140587a6133301"),
-      (hex"30450221009e0e57886b81fd4159f672728891d799203b23c351e93134aba445b288443d3502207b77faa4227126b7d087144c75f4e5c8af9db705b37806dbd2d3f4339666d32201", hex"3045022100aa403fa23e82379a16ba16b446dbdee5a4f879ba690ad3f4f10dc445df2832ba022000a51fdbdb69dcbd5518274303fcece60d719cb6d593e882fdb0190253bbaaab01"),
-      (hex"3045022100fb44e66fc294d9ece2c33465398221edcfd857208d32a36dedab9906d00b356d022008c5fcfa7b41f8616d57ed009a8614aca636edae1479b6114e03407ba6fceea701", hex"3045022100a9ad65dada5e5500897173bca610135a13008895ce445fbc90d440d5406bd6150220644d75e5ca774ef6b559ffaf1083a9a5da250c3c87666d96daf35b480ef0c65701"),
-      (hex"3044022009e4f39656dc8712863bffe2acdfa4d2245f65f38a230dd034b226dc2e5fd7ce022049c0108e44c399d1a1b67ab6f60566f491d8682406ac4a03a914f9a21196d6ba01", hex"3044022063a6839c031fd5534d7807a8fff8ca0f9a72d8aa9d78ee104d6ece2b417ac5ce0220193d9b521a44011d31d2bb85be5043119c42a7aee3d9ef68b7388c3c9c3a780501"),
-      (hex"304402207eaf435948b9e04cb6551f97ee5d85ac879e20d3fae3f5c9a0880ef452d32ac902206e9c5c9098c3e3bef010d3142578823c7fb43b43fe0a0036d481f18a0168b20f01", hex"304402205dda44c9d8aaf37a6f5f6c99713d2a001682f2593a960ccaf5c23059cd20016b02200991b09bccdfc87918852650a4bfa7b4ac9028101362631b5ec376427084138e01"),
-      (hex"304402200232dbb9d46dabc6569f3f65f4f2a4b7e5acf7be85687b9897141e9784cb9d370220087b2c1dda444d7351976135b56f2f2ca22d8c03d5aa40acbce8c4241daf541501", hex"3045022100eddaa4f767bc70fd672bee983b1644dbff9479def0efc7cca79f0daa1bad370d02204c810238968ae9e86b99d348464e9ac7a06e40225022ae4203ae36fad928c22401"),
-      (hex"3045022100daa604934db542aa5a9bcbd48eb666fac8acdee92ccd8d42228f52377c51184a022069f855477b27cec39b15fb9e666c09b6c4860c8b80cd1315d2498d97d9cf024601", hex"3044022020e6d43dee03f54574d8245edf2e312d0a492dd2350b7f8df68390b8876de5640220555d46cd545ff0ecc280e6bc82e976ff494bab5f2b128807626753ffb9e5796e01"),
-      (hex"3044022046c3cf88f9e8639c954c584725482dd6e6403deda3824c37ae95db9bf99d341602206432f76c5ca3d61951155c1b223fd35dd4227f83e1ff9a93437b63515567d23f01", hex"3045022100812a360a6ddc44179f80e5b4252bca74bb5dbe1da25230c9e8afcd388a2fd64702202e45a658123f0263ca1157ef9a9995ede1625d1ecba532957185f1d8044aa1d301"),
-      (hex"30440220482df018e51b4f684271682bc3c81c481d288d61000a77df2126afe042c3471d02204772720ff1ea323a271259022a0458ae4d228e5f613ade63fca38eb5d443756a01", hex"3044022076a338d225b8954412198ce5936aaa6433da1f51dd9bcbe69d95a1e0960c169802207db267517fc73e358e09f4c89313ae17ed4d5f6d8432faec9ec1e784a2a7da7c01"),
-      (hex"3045022100916255b5758d66cd46f653f8a5a71b1c857bfae1a7cf85195b5d78476c4138c502200101e3ec9874aa2644691662bf8945a182af1237bb61c459e9dbff495b9097d001", hex"304402201d099a464a7696b22a8e58b65c52e9a519a06a5c49e944155d4e5fbd14d3f5b902203c091c0ec5b840a80be739d29b5fc2c75cb94928e5ea83133f84d226f28cd4b701"),
-      (hex"3045022100d8eaa436faec6b38f155065893f1212ce43615fbec49b4af72f16119774b5472022033aa303992f4a8cfe1c77e6a0d2baa73baad0305a88da16d26122e536867431101", hex"304402203af7b7ea16cc018fdb414f52cd38ed548dc257cbb06c812c9dc1d60500b21485022072cd74b7e49bfd813e09bae778da903b44b7b0ae22b87af4c34cf8bb77dfdef201"),
-      (hex"304402204f5dd042bfb449c522012a2d461e5a94c9ea3be629c0ab091b0e1f5569eb119c022021411ff8affabab12cd39f0eaa64f1b08fa72ada6f37d1d46c6bde4483d869fb01", hex"3044022043573edb37be815d1b97b90803f601dfc91c25279ccda606ad6515fee721fe57022030ac2883408a2075a47337443eb539062a8ac6b5453befb2b9863d697e35dd8201"),
-      (hex"3044022030ff3d4d42ef1c3d742164a30ff7b021215e881d9277a52a1720514a4473289502204b090f6b412e8caacb5bcbf295babb075d9d5490e3f7678c289206780f6f0bc901", hex"304502210093fd7dfa3ef6cdf5b94cfadf83022be98062d53cd7097a73947453b210a481eb0220622e63a21b787ea7bb55f01ab6fe503fcb8ef4cb65adce7a264ae014403646fe01")
+      (new ByteVectorAcinq("30440220104aed8d52fe50e2313a9a456607838a0cdac75fdc37afe581c415e7a20da944022034d1ac69c64f34571251be8cc6b50116f26453813267fb9afa3e318a79f4f32401"), new ByteVectorAcinq("304502210097fcda40b22916b5d61badedf6126658c2b5927d5002cc2c3e5f88a78ba5f45b02204a74bcf8827d894cab153fc051f39d8e2aeb660162a6a05797f7140587a6133301")),
+      (new ByteVectorAcinq("30450221009e0e57886b81fd4159f672728891d799203b23c351e93134aba445b288443d3502207b77faa4227126b7d087144c75f4e5c8af9db705b37806dbd2d3f4339666d32201"), new ByteVectorAcinq("3045022100aa403fa23e82379a16ba16b446dbdee5a4f879ba690ad3f4f10dc445df2832ba022000a51fdbdb69dcbd5518274303fcece60d719cb6d593e882fdb0190253bbaaab01")),
+      (new ByteVectorAcinq("3045022100fb44e66fc294d9ece2c33465398221edcfd857208d32a36dedab9906d00b356d022008c5fcfa7b41f8616d57ed009a8614aca636edae1479b6114e03407ba6fceea701"), new ByteVectorAcinq("3045022100a9ad65dada5e5500897173bca610135a13008895ce445fbc90d440d5406bd6150220644d75e5ca774ef6b559ffaf1083a9a5da250c3c87666d96daf35b480ef0c65701")),
+      (new ByteVectorAcinq("3044022009e4f39656dc8712863bffe2acdfa4d2245f65f38a230dd034b226dc2e5fd7ce022049c0108e44c399d1a1b67ab6f60566f491d8682406ac4a03a914f9a21196d6ba01"), new ByteVectorAcinq("3044022063a6839c031fd5534d7807a8fff8ca0f9a72d8aa9d78ee104d6ece2b417ac5ce0220193d9b521a44011d31d2bb85be5043119c42a7aee3d9ef68b7388c3c9c3a780501")),
+      (new ByteVectorAcinq("304402207eaf435948b9e04cb6551f97ee5d85ac879e20d3fae3f5c9a0880ef452d32ac902206e9c5c9098c3e3bef010d3142578823c7fb43b43fe0a0036d481f18a0168b20f01"), new ByteVectorAcinq("304402205dda44c9d8aaf37a6f5f6c99713d2a001682f2593a960ccaf5c23059cd20016b02200991b09bccdfc87918852650a4bfa7b4ac9028101362631b5ec376427084138e01")),
+      (new ByteVectorAcinq("304402200232dbb9d46dabc6569f3f65f4f2a4b7e5acf7be85687b9897141e9784cb9d370220087b2c1dda444d7351976135b56f2f2ca22d8c03d5aa40acbce8c4241daf541501"), new ByteVectorAcinq("3045022100eddaa4f767bc70fd672bee983b1644dbff9479def0efc7cca79f0daa1bad370d02204c810238968ae9e86b99d348464e9ac7a06e40225022ae4203ae36fad928c22401")),
+      (new ByteVectorAcinq("3045022100daa604934db542aa5a9bcbd48eb666fac8acdee92ccd8d42228f52377c51184a022069f855477b27cec39b15fb9e666c09b6c4860c8b80cd1315d2498d97d9cf024601"), new ByteVectorAcinq("3044022020e6d43dee03f54574d8245edf2e312d0a492dd2350b7f8df68390b8876de5640220555d46cd545ff0ecc280e6bc82e976ff494bab5f2b128807626753ffb9e5796e01")),
+      (new ByteVectorAcinq("3044022046c3cf88f9e8639c954c584725482dd6e6403deda3824c37ae95db9bf99d341602206432f76c5ca3d61951155c1b223fd35dd4227f83e1ff9a93437b63515567d23f01"), new ByteVectorAcinq("3045022100812a360a6ddc44179f80e5b4252bca74bb5dbe1da25230c9e8afcd388a2fd64702202e45a658123f0263ca1157ef9a9995ede1625d1ecba532957185f1d8044aa1d301")),
+      (new ByteVectorAcinq("30440220482df018e51b4f684271682bc3c81c481d288d61000a77df2126afe042c3471d02204772720ff1ea323a271259022a0458ae4d228e5f613ade63fca38eb5d443756a01"), new ByteVectorAcinq("3044022076a338d225b8954412198ce5936aaa6433da1f51dd9bcbe69d95a1e0960c169802207db267517fc73e358e09f4c89313ae17ed4d5f6d8432faec9ec1e784a2a7da7c01")),
+      (new ByteVectorAcinq("3045022100916255b5758d66cd46f653f8a5a71b1c857bfae1a7cf85195b5d78476c4138c502200101e3ec9874aa2644691662bf8945a182af1237bb61c459e9dbff495b9097d001"), new ByteVectorAcinq("304402201d099a464a7696b22a8e58b65c52e9a519a06a5c49e944155d4e5fbd14d3f5b902203c091c0ec5b840a80be739d29b5fc2c75cb94928e5ea83133f84d226f28cd4b701")),
+      (new ByteVectorAcinq("3045022100d8eaa436faec6b38f155065893f1212ce43615fbec49b4af72f16119774b5472022033aa303992f4a8cfe1c77e6a0d2baa73baad0305a88da16d26122e536867431101"), new ByteVectorAcinq("304402203af7b7ea16cc018fdb414f52cd38ed548dc257cbb06c812c9dc1d60500b21485022072cd74b7e49bfd813e09bae778da903b44b7b0ae22b87af4c34cf8bb77dfdef201")),
+      (new ByteVectorAcinq("304402204f5dd042bfb449c522012a2d461e5a94c9ea3be629c0ab091b0e1f5569eb119c022021411ff8affabab12cd39f0eaa64f1b08fa72ada6f37d1d46c6bde4483d869fb01"), new ByteVectorAcinq("3044022043573edb37be815d1b97b90803f601dfc91c25279ccda606ad6515fee721fe57022030ac2883408a2075a47337443eb539062a8ac6b5453befb2b9863d697e35dd8201")),
+      (new ByteVectorAcinq("3044022030ff3d4d42ef1c3d742164a30ff7b021215e881d9277a52a1720514a4473289502204b090f6b412e8caacb5bcbf295babb075d9d5490e3f7678c289206780f6f0bc901"), new ByteVectorAcinq("304502210093fd7dfa3ef6cdf5b94cfadf83022be98062d53cd7097a73947453b210a481eb0220622e63a21b787ea7bb55f01ab6fe503fcb8ef4cb65adce7a264ae014403646fe01"))
     )
 
     val sigs = c.commitments
@@ -421,11 +423,11 @@ class ChannelCodecsSpec extends AnyFunSuite {
 }
 
 object ChannelCodecsSpec {
-  val keyManager = new LocalKeyManager(ByteVector32(ByteVector.fill(32)(1)), Block.RegtestGenesisBlock.hash)
+  val keyManager = new LocalKeyManager(new ByteVector32("01" * 32), Block.RegtestGenesisBlock.hash)
   val localParams = LocalParams(
     keyManager.nodeId,
-    fundingKeyPath = DeterministicWallet.KeyPath(Seq(42L)),
-    dustLimit = Satoshi(546),
+    fundingKeyPath = new KeyPath("42"),
+    dustLimit = new Satoshi(546),
     maxHtlcValueInFlightMsat = UInt64(50000000),
     channelReserve = 10000 sat,
     htlcMinimum = 10000 msat,
@@ -444,20 +446,22 @@ object ChannelCodecsSpec {
     htlcMinimum = 5000 msat,
     toSelfDelay = CltvExpiryDelta(144),
     maxAcceptedHtlcs = 50,
-    fundingPubKey = PrivateKey(ByteVector32(ByteVector.fill(32)(1)) :+ 1.toByte).publicKey,
-    revocationBasepoint = PrivateKey(ByteVector.fill(32)(2)).publicKey,
-    paymentBasepoint = PrivateKey(ByteVector.fill(32)(3)).publicKey,
-    delayedPaymentBasepoint = PrivateKey(ByteVector.fill(32)(4)).publicKey,
-    htlcBasepoint = PrivateKey(ByteVector.fill(32)(6)).publicKey,
-    features = Features.empty)
+    fundingPubKey = PrivateKey.fromHex("01" * 32).publicKey,
+    revocationBasepoint = PrivateKey.fromHex("02" * 32).publicKey,
+    paymentBasepoint = PrivateKey.fromHex("03" * 32).publicKey,
+    delayedPaymentBasepoint = PrivateKey.fromHex("04" * 32).publicKey,
+    htlcBasepoint = PrivateKey.fromHex("06" * 32).publicKey,
+    features = Features(hex"deadbeef"))
 
   val paymentPreimages = Seq(
-    ByteVector32(hex"0000000000000000000000000000000000000000000000000000000000000000"),
-    ByteVector32(hex"0101010101010101010101010101010101010101010101010101010101010101"),
-    ByteVector32(hex"0202020202020202020202020202020202020202020202020202020202020202"),
-    ByteVector32(hex"0303030303030303030303030303030303030303030303030303030303030303"),
-    ByteVector32(hex"0404040404040404040404040404040404040404040404040404040404040404")
+    new ByteVector32("0000000000000000000000000000000000000000000000000000000000000000"),
+    new ByteVector32("0101010101010101010101010101010101010101010101010101010101010101"),
+    new ByteVector32("0202020202020202020202020202020202020202020202020202020202020202"),
+    new ByteVector32("0303030303030303030303030303030303030303030303030303030303030303"),
+    new ByteVector32("0404040404040404040404040404040404040404040404040404040404040404")
   )
+
+  implicit def bytevarray2bytevector32(input: Array[Byte]) : ByteVector32 = new ByteVector32(input)
 
   val htlcs = Seq[DirectedHtlc](
     IncomingHtlc(UpdateAddHtlc(ByteVector32.Zeroes, 0, 1000000 msat, Crypto.sha256(paymentPreimages(0)), CltvExpiry(500), TestConstants.emptyOnionPacket)),
@@ -467,16 +471,16 @@ object ChannelCodecsSpec {
     IncomingHtlc(UpdateAddHtlc(ByteVector32.Zeroes, 2, 4000000 msat, Crypto.sha256(paymentPreimages(4)), CltvExpiry(504), TestConstants.emptyOnionPacket))
   )
 
-  val normal = makeChannelDataNormal(htlcs, Map(42L -> Local(UUID.randomUUID, None), 15000L -> Relayed(ByteVector32(ByteVector.fill(32)(42)), 43, 11000000 msat, 10000000 msat)))
+  val normal = makeChannelDataNormal(htlcs, Map(42L -> Local(UUID.randomUUID, None), 15000L -> Relayed(new ByteVector32("2a" * 32), 43, 11000000 msat, 10000000 msat)))
 
   def makeChannelDataNormal(htlcs: Seq[DirectedHtlc], origins: Map[Long, Origin]): DATA_NORMAL = {
-    val channelUpdate = Announcements.makeChannelUpdate(ByteVector32(ByteVector.fill(32)(1)), randomKey, randomKey.publicKey, ShortChannelId(142553), CltvExpiryDelta(42), 15 msat, 575 msat, 53, Channel.MAX_FUNDING.toMilliSatoshi)
+    val channelUpdate = Announcements.makeChannelUpdate(new ByteVector32("01" * 32), randomKey, randomKey.publicKey, ShortChannelId(142553), CltvExpiryDelta(42), 15 msat, 575 msat, 53, Channel.MAX_FUNDING.toMilliSatoshi)
     val fundingTx = Transaction.read("0200000001adbb20ea41a8423ea937e76e8151636bf6093b70eaff942930d20576600521fd000000006b48304502210090587b6201e166ad6af0227d3036a9454223d49a1f11839c1a362184340ef0240220577f7cd5cca78719405cbf1de7414ac027f0239ef6e214c90fcaab0454d84b3b012103535b32d5eb0a6ed0982a0479bbadc9868d9836f6ba94dd5a63be16d875069184ffffffff028096980000000000220020c015c4a6be010e21657068fc2e6a9d02b27ebe4d490a25846f7237f104d1a3cd20256d29010000001600143ca33c2e4446f4a305f23c80df8ad1afdcf652f900000000")
     val fundingAmount = fundingTx.txOut.head.amount
-    val commitmentInput = Funding.makeFundingInputInfo(fundingTx.hash, 0, fundingAmount, keyManager.fundingPublicKey(localParams.fundingKeyPath).publicKey, remoteParams.fundingPubKey)
+    val commitmentInput = Funding.makeFundingInputInfo(fundingTx.hash, 0, new Satoshi(fundingAmount), keyManager.fundingPublicKey(localParams.fundingKeyPath).publicKey, remoteParams.fundingPubKey)
 
-    val localCommit = LocalCommit(0, CommitmentSpec(htlcs.toSet, 1500, 50000000 msat, 70000000 msat), PublishableTxs(CommitTx(commitmentInput, Transaction(2, Nil, Nil, 0)), Nil))
-    val remoteCommit = RemoteCommit(0, CommitmentSpec(htlcs.map(_.opposite).toSet, 1500, 50000 msat, 700000 msat), ByteVector32(hex"0303030303030303030303030303030303030303030303030303030303030303"), PrivateKey(ByteVector.fill(32)(4)).publicKey)
+    val localCommit = LocalCommit(0, CommitmentSpec(htlcs.toSet, 1500, 50000000 msat, 70000000 msat), PublishableTxs(CommitTx(commitmentInput, new Transaction(2, Nil, Nil, 0)), Nil))
+    val remoteCommit = RemoteCommit(0, CommitmentSpec(htlcs.map(_.opposite).toSet, 1500, 50000 msat, 700000 msat), new ByteVector32("0303030303030303030303030303030303030303030303030303030303030303"), new PrivateKey(Hex.decode("04" * 32)).publicKey)
     val commitments = Commitments(ChannelVersion.STANDARD, localParams, remoteParams, channelFlags = 0x01.toByte, localCommit, remoteCommit, LocalChanges(Nil, Nil, Nil), RemoteChanges(Nil, Nil, Nil),
       localNextHtlcId = 32L,
       remoteNextHtlcId = 4L,
@@ -617,6 +621,13 @@ object ChannelCodecsSpec {
       case x: InputInfo => JObject(("outPoint", JString(s"${x.outPoint.txid}:${x.outPoint.index}")), ("amountSatoshis", JInt(x.txOut.amount.toLong)))
     }))
 
+    class KeyPathSerializer extends CustomSerializer[KeyPath](format => ({
+      null
+    }, {
+      case x: KeyPath => JObject(("path", JArray(x.path.asScala.toList.map(l => JLong(l)))))
+    }))
+
+
     implicit val formats = org.json4s.DefaultFormats +
       new ByteVectorSerializer +
       new ByteVector32Serializer +
@@ -637,7 +648,8 @@ object ChannelCodecsSpec {
       new OutPointSerializer +
       new OutPointKeySerializer +
       new ChannelVersionSerializer +
-      new InputInfoSerializer
+      new InputInfoSerializer +
+      new KeyPathSerializer
   }
 
 }

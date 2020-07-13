@@ -29,6 +29,8 @@ import org.scalatest.Outcome
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
 
 import scala.concurrent.duration._
+import fr.acinq.eclair.KotlinUtils._
+
 
 /**
   * Created by PM on 05/07/2016.
@@ -92,7 +94,7 @@ class WaitForFundingLockedStateSpec extends TestKitBaseClass with FixtureAnyFunS
   test("recv BITCOIN_FUNDING_SPENT (other commit)") { f =>
     import f._
     val tx = alice.stateData.asInstanceOf[DATA_WAIT_FOR_FUNDING_LOCKED].commitments.localCommit.publishableTxs.commitTx.tx
-    alice ! WatchEventSpent(BITCOIN_FUNDING_SPENT, Transaction(0, Nil, Nil, 0))
+    alice ! WatchEventSpent(BITCOIN_FUNDING_SPENT, new Transaction(0, Nil, Nil, 0))
     alice2bob.expectMsgType[Error]
     alice2blockchain.expectMsg(PublishAsap(tx))
     alice2blockchain.expectMsgType[PublishAsap]

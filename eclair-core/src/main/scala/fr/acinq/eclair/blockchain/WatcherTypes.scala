@@ -17,17 +17,18 @@
 package fr.acinq.eclair.blockchain
 
 import akka.actor.ActorRef
-import fr.acinq.bitcoin.Crypto.PublicKey
-import fr.acinq.bitcoin.{ByteVector32, Script, ScriptWitness, Transaction}
+import fr.acinq.bitcoin.PublicKey
+import fr.acinq.bitcoin.{ByteVector => ByteVectorAcinq, ByteVector32, Script, ScriptWitness, Transaction}
 import fr.acinq.eclair.channel.BitcoinEvent
 import fr.acinq.eclair.wire.ChannelAnnouncement
-import scodec.bits.ByteVector
 
 import scala.util.{Failure, Success, Try}
+import scala.collection.JavaConverters._
+import fr.acinq.eclair.KotlinUtils._
 
 /**
-  * Created by PM on 19/01/2016.
-  */
+ * Created by PM on 19/01/2016.
+ */
 
 // @formatter:off
 
@@ -36,31 +37,47 @@ sealed trait Watch {
   def event: BitcoinEvent
 }
 // we need a public key script to use electrum apis
-final case class WatchConfirmed(channel: ActorRef, txId: ByteVector32, publicKeyScript: ByteVector, minDepth: Long, event: BitcoinEvent) extends Watch
+final case class WatchConfirmed(channel: ActorRef, txId: ByteVector32, publicKeyScript: ByteVectorAcinq, minDepth: Long, event: BitcoinEvent) extends Watch
 object WatchConfirmed {
   // if we have the entire transaction, we can get the redeemScript from the witness, and re-compute the publicKeyScript
   // we support both p2pkh and p2wpkh scripts
-  def apply(channel: ActorRef, tx: Transaction, minDepth: Long, event: BitcoinEvent): WatchConfirmed = WatchConfirmed(channel, tx.txid, tx.txOut.map(_.publicKeyScript).headOption.getOrElse(ByteVector.empty), minDepth, event)
+  def apply(channel: ActorRef, tx: Transaction, minDepth: Long, event: BitcoinEvent): WatchConfirmed = {
+    val output: java.util.List[fr.acinq.bitcoin.TxOut] = tx.txOut
+    val lastItem: ByteVectorAcinq = if (output.isEmpty) ByteVectorAcinq.empty else output.last.publicKeyScript
 
-  def extractPublicKeyScript(witness: ScriptWitness): ByteVector = Try(PublicKey(witness.stack.last)) match {
-    case Success(pubKey) =>
-      // if last element of the witness is a public key, then this is a p2wpkh
-      Script.write(Script.pay2wpkh(pubKey))
-    case Failure(_) =>
-      // otherwise this is a p2wsh
-      Script.write(Script.pay2wsh(witness.stack.last))
+    WatchConfirmed(channel, tx.txid, lastItem, minDepth, event)
+  }
+
+  def apply(channel: ActorRef, txId: ByteVector32, publicKeyScript: Array[Byte], minDepth: Long, event: BitcoinEvent) : WatchConfirmed = {
+    WatchConfirmed(channel, txId, new ByteVectorAcinq(publicKeyScript), minDepth, event)
+  }
+
+  def extractPublicKeyScript(witness: ScriptWitness): Array[Byte] = {
+    Try(new PublicKey(witness.stack.asScala.last)) match {
+      case Success(pubKey) =>
+          // if last element of the witness is a public key, then this is a p2wpkh
+        Script.write(Script.pay2wpkh(pubKey))
+      case Failure(_) =>
+        // otherwise this is a p2wsh
+        Script.write(Script.pay2wsh(witness.stack.asScala.last))
+    }
   }
 }
 
-final case class WatchSpent(channel: ActorRef, txId: ByteVector32, outputIndex: Int, publicKeyScript: ByteVector, event: BitcoinEvent) extends Watch
+final case class WatchSpent(channel: ActorRef, txId: ByteVector32, outputIndex: Int, publicKeyScript: ByteVectorAcinq, event: BitcoinEvent) extends Watch
 object WatchSpent {
   // if we have the entire transaction, we can get the publicKeyScript from the relevant output
-  def apply(channel: ActorRef, tx: Transaction, outputIndex: Int, event: BitcoinEvent): WatchSpent = WatchSpent(channel, tx.txid, outputIndex, tx.txOut(outputIndex).publicKeyScript, event)
+  def apply(channel: ActorRef, tx: Transaction, outputIndex: Int, event: BitcoinEvent): WatchSpent = {
+    WatchSpent(channel, tx.txid, outputIndex, tx.txOut(outputIndex).publicKeyScript, event)
+  }
 }
-final case class WatchSpentBasic(channel: ActorRef, txId: ByteVector32, outputIndex: Int, publicKeyScript: ByteVector, event: BitcoinEvent) extends Watch // we use this when we don't care about the spending tx, and we also assume txid already exists
+
+final case class WatchSpentBasic(channel: ActorRef, txId: ByteVector32, outputIndex: Int, publicKeyScript: ByteVectorAcinq, event: BitcoinEvent) extends Watch // we use this when we don't care about the spending tx, and we also assume txid already exists
 object WatchSpentBasic {
   // if we have the entire transaction, we can get the publicKeyScript from the relevant output
   def apply(channel: ActorRef, tx: Transaction, outputIndex: Int, event: BitcoinEvent): WatchSpentBasic = WatchSpentBasic(channel, tx.txid, outputIndex, tx.txOut(outputIndex).publicKeyScript, event)
+
+  def apply(channel: ActorRef, txId: ByteVector32, outputIndex: Int, publicKeyScript: Array[Byte], event: BitcoinEvent): WatchSpentBasic = WatchSpentBasic(channel, txId, outputIndex, new ByteVectorAcinq(publicKeyScript), event)
 }
 // TODO: notify me if confirmation number gets below minDepth?
 final case class WatchLost(channel: ActorRef, txId: ByteVector32, minDepth: Long, event: BitcoinEvent) extends Watch

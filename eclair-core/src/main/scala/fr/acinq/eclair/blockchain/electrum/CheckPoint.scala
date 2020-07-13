@@ -18,7 +18,7 @@ package fr.acinq.eclair.blockchain.electrum
 
 import java.io.InputStream
 
-import fr.acinq.bitcoin.{Block, ByteVector32, encodeCompact}
+import fr.acinq.bitcoin.{Block, ByteVector32, UInt256}
 import fr.acinq.eclair.blockchain.electrum.db.HeaderDb
 import org.json4s.JsonAST.{JArray, JInt, JString}
 import org.json4s.jackson.JsonMethods
@@ -49,7 +49,8 @@ object CheckPoint {
   def load(stream: InputStream): Vector[CheckPoint] = {
     val JArray(values) = JsonMethods.parse(stream)
     val checkpoints = values.collect {
-      case JArray(JString(a) :: JInt(b) :: Nil) => CheckPoint(ByteVector32.fromValidHex(a).reverse, encodeCompact(b.bigInteger))
+      case JArray(JString(a) :: JInt(b) :: Nil) =>
+        CheckPoint(ByteVector32.fromValidHex(a).reversed(), new UInt256(b.toByteArray).endodeCompact(false))
     }
     checkpoints.toVector
   }

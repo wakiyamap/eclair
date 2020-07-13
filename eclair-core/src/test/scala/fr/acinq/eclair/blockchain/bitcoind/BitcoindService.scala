@@ -33,6 +33,7 @@ import org.json4s.JsonAST._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.io.Source
+import fr.acinq.eclair.KotlinUtils._
 
 trait BitcoindService extends Logging {
   self: TestKitBase =>

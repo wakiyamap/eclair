@@ -20,8 +20,7 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
 import com.typesafe.config.{Config, ConfigFactory}
-import fr.acinq.bitcoin.Block
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.{Block, ByteVector32, PublicKey}
 import fr.acinq.eclair.FeatureSupport.Mandatory
 import fr.acinq.eclair.Features._
 import fr.acinq.eclair.crypto.LocalKeyManager
@@ -32,6 +31,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 class StartupSpec extends AnyFunSuite {
+  implicit def bytevector322bytevector(input: ByteVector32) : ByteVector = ByteVector.view(input.toByteArray)
 
   val defaultConf = ConfigFactory.parseResources("reference.conf").getConfig("eclair")
 
@@ -130,7 +130,7 @@ class StartupSpec extends AnyFunSuite {
     )
 
     val nodeParams = makeNodeParamsWithDefaults(perNodeConf.withFallback(defaultConf))
-    val perNodeFeatures = nodeParams.overrideFeatures(PublicKey(ByteVector.fromValidHex("02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")))
+    val perNodeFeatures = nodeParams.overrideFeatures(new PublicKey(ByteVector.fromValidHex("02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").toArray))
     assert(perNodeFeatures.hasFeature(BasicMultiPartPayment, Some(Mandatory)))
   }
 

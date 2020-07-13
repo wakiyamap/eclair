@@ -16,6 +16,7 @@
 
 package fr.acinq.eclair.wire
 
+import fr.acinq.bitcoin.ByteVector32
 import fr.acinq.eclair.UInt64
 import scodec.bits.ByteVector
 
@@ -34,6 +35,9 @@ trait Tlv
  * @param value tlv value (length is implicit, and encoded as a varint).
  */
 case class GenericTlv(tag: UInt64, value: ByteVector) extends Tlv
+object GenericTlv {
+  def apply(tag: UInt64, value: ByteVector32): GenericTlv = GenericTlv(tag, ByteVector.view(value.toByteArray))
+}
 
 /**
  * A tlv stream is a collection of tlv records.

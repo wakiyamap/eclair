@@ -36,6 +36,7 @@ import org.scalatest.{BeforeAndAfterAll, Outcome}
 
 import scala.concurrent.duration._
 import scala.io.Source
+import fr.acinq.eclair.KotlinUtils._
 
 /**
  * Created by PM on 30/05/2016.

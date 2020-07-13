@@ -22,7 +22,9 @@ import akka.Done
 import akka.actor.{ActorRef, Props}
 import akka.event.DiagnosticLoggingAdapter
 import akka.event.Logging.MDC
-import fr.acinq.bitcoin.Crypto.PublicKey
+import akka.event.LoggingAdapter
+import fr.acinq.bitcoin
+import fr.acinq.bitcoin.PublicKey
 import fr.acinq.bitcoin.Script.{pay2wsh, write}
 import fr.acinq.bitcoin.{ByteVector32, Satoshi}
 import fr.acinq.eclair.Logs.LogCategory
@@ -42,10 +44,13 @@ import fr.acinq.eclair.wire._
 import kamon.context.Context
 
 import scala.collection.immutable.SortedMap
+import scala.collection.{SortedSet, mutable}
+import scala.jdk.CollectionConverters
+import scala.compat.Platform
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Promise}
 import scala.util.Try
-
+import KotlinUtils._
 /**
  * Created by PM on 24/05/2016.
  */

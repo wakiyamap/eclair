@@ -18,8 +18,7 @@ package fr.acinq.eclair.router
 
 import akka.actor.{ActorContext, ActorRef, Status}
 import akka.event.{DiagnosticLoggingAdapter, LoggingAdapter}
-import fr.acinq.bitcoin.Crypto.PublicKey
-import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Satoshi}
+import fr.acinq.bitcoin.{ByteVector32, ByteVector64, PublicKey, Satoshi}
 import fr.acinq.eclair.Logs.LogCategory
 import fr.acinq.eclair.payment.PaymentRequest.ExtraHop
 import fr.acinq.eclair.router.Graph.GraphStructure.DirectedGraph.graphEdgeToHop
@@ -35,6 +34,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.util.{Failure, Random, Success, Try}
+import fr.acinq.eclair.KotlinUtils._
 
 object RouteCalculation {
 
@@ -136,7 +136,7 @@ object RouteCalculation {
   }
 
   /** Bolt 11 routing hints don't include the channel's capacity, so we round up the maximum htlc amount. */
-  private def htlcMaxToCapacity(htlcMaximum: MilliSatoshi): Satoshi = htlcMaximum.truncateToSatoshi + 1.sat
+  private def htlcMaxToCapacity(htlcMaximum: MilliSatoshi): Satoshi = htlcMaximum.truncateToSatoshi plus 1.sat
 
   /** This method is used after a payment failed, and we want to exclude some nodes that we know are failing */
   def getIgnoredChannelDesc(channels: Map[ShortChannelId, PublicChannel], ignoreNodes: Set[PublicKey]): Iterable[ChannelDesc] = {
@@ -162,7 +162,7 @@ object RouteCalculation {
 
   def getDefaultRouteParams(routerConf: RouterConf): RouteParams = RouteParams(
     randomize = routerConf.randomizeRouteSelection,
-    maxFeeBase = routerConf.searchMaxFeeBase.toMilliSatoshi,
+    maxFeeBase = MilliSatoshi(routerConf.searchMaxFeeBase),
     maxFeePct = routerConf.searchMaxFeePct,
     routeMaxLength = routerConf.searchMaxRouteLength,
     routeMaxCltv = routerConf.searchMaxCltv,

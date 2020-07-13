@@ -20,7 +20,7 @@ import java.util.UUID
 
 import akka.http.scaladsl.unmarshalling.Unmarshaller
 import akka.util.Timeout
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.PublicKey
 import fr.acinq.bitcoin.{ByteVector32, Satoshi}
 import fr.acinq.eclair.api.JsonSupport._
 import fr.acinq.eclair.io.NodeURI
@@ -33,7 +33,10 @@ import scala.util.Try
 
 object FormParamExtractors {
 
-  implicit val publicKeyUnmarshaller: Unmarshaller[String, PublicKey] = Unmarshaller.strict { rawPubKey => PublicKey(ByteVector.fromValidHex(rawPubKey)) }
+  implicit val publicKeyUnmarshaller: Unmarshaller[String, PublicKey] = Unmarshaller.strict { rawPubKey => {
+      PublicKey.fromHex(rawPubKey.filterNot(_.isWhitespace))
+    }
+  }
 
   implicit val binaryDataUnmarshaller: Unmarshaller[String, ByteVector] = Unmarshaller.strict { str => ByteVector.fromValidHex(str) }
 
@@ -53,16 +56,20 @@ object FormParamExtractors {
 
   implicit val nodeURIUnmarshaller: Unmarshaller[String, NodeURI] = Unmarshaller.strict { str => NodeURI.parse(str) }
 
-  implicit val pubkeyListUnmarshaller: Unmarshaller[String, List[PublicKey]] = listUnmarshaller(pk => PublicKey(ByteVector.fromValidHex(pk)))
+  implicit val pubkeyListUnmarshaller: Unmarshaller[String, List[PublicKey]] = listUnmarshaller(pk => PublicKey.fromHex(pk))
 
-  implicit val satoshiUnmarshaller: Unmarshaller[String, Satoshi] = Unmarshaller.strict { str => Satoshi(str.toLong) }
+  implicit val satoshiUnmarshaller: Unmarshaller[String, Satoshi] = Unmarshaller.strict { str => new Satoshi(str.toLong) }
 
   implicit val millisatoshiUnmarshaller: Unmarshaller[String, MilliSatoshi] = Unmarshaller.strict { str => MilliSatoshi(str.toLong) }
 
   private def listUnmarshaller[T](unmarshal: String => T): Unmarshaller[String, List[T]] = Unmarshaller.strict { str =>
     Try(serialization.read[List[String]](str).map(unmarshal))
-      .recoverWith(_ => Try(str.split(",").toList.map(unmarshal)))
-      .getOrElse(throw new IllegalArgumentException("list must be either json-encoded or comma separated"))
+      .recoverWith(_ => Try {
+        val items = str.split(",").toList.map(s => s.filterNot(_.isWhitespace))
+        items.map(unmarshal)
+      }).getOrElse {
+      throw new IllegalArgumentException("list must be either json-encoded or comma separated")
+    }
   }
 
 }

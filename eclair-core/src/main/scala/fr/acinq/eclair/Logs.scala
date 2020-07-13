@@ -22,7 +22,7 @@ import akka.event.DiagnosticLoggingAdapter
 import akka.event.Logging.MDC
 import akka.io.Tcp
 import fr.acinq.bitcoin.ByteVector32
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.PublicKey
 import fr.acinq.eclair.blockchain.ValidateResult
 import fr.acinq.eclair.channel.{LocalChannelDown, LocalChannelUpdate}
 import fr.acinq.eclair.crypto.TransportHandler.HandshakeCompleted

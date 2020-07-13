@@ -20,7 +20,7 @@ import java.net.{Inet4Address, Inet6Address, InetAddress}
 
 import com.google.common.net.InetAddresses
 import fr.acinq.bitcoin.ByteVector32
-import fr.acinq.bitcoin.Crypto.PrivateKey
+import fr.acinq.bitcoin.PrivateKey
 import fr.acinq.eclair.crypto.Hmac256
 import fr.acinq.eclair.wire.CommonCodecs._
 import fr.acinq.eclair.{UInt64, randomBytes32}
@@ -194,7 +194,7 @@ class CommonCodecsSpec extends AnyFunSuite {
   }
 
   test("encode/decode with private key codec") {
-    val value = PrivateKey(randomBytes32)
+    val value = new PrivateKey(randomBytes32)
     val wire = privateKey.encode(value).require
     assert(wire.length == 256)
     val value1 = privateKey.decode(wire).require.value
@@ -202,7 +202,7 @@ class CommonCodecsSpec extends AnyFunSuite {
   }
 
   test("encode/decode with public key codec") {
-    val value = PrivateKey(randomBytes32).publicKey
+    val value = new PrivateKey(randomBytes32).publicKey
     val wire = CommonCodecs.publicKey.encode(value).require
     assert(wire.length == 33 * 8)
     val value1 = CommonCodecs.publicKey.decode(wire).require.value

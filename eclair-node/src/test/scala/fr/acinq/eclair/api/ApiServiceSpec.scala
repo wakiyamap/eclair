@@ -27,7 +27,7 @@ import akka.http.scaladsl.testkit.{RouteTestTimeout, ScalatestRouteTest, WSProbe
 import akka.stream.Materializer
 import akka.util.Timeout
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.PublicKey
 import fr.acinq.bitcoin.{Block, ByteVector32}
 import fr.acinq.eclair.ApiTypes.ChannelIdentifier
 import fr.acinq.eclair.FeatureSupport.{Mandatory, Optional}
@@ -45,7 +45,7 @@ import fr.acinq.eclair.wire.{Color, NodeAddress}
 import org.mockito.scalatest.IdiomaticMockito
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
-import scodec.bits._
+import KotlinUtils._
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -59,8 +59,8 @@ class ApiServiceSpec extends AnyFunSuite with ScalatestRouteTest with IdiomaticM
   implicit val serialization = JsonSupport.serialization
   implicit val routeTestTimeout = RouteTestTimeout(3 seconds)
 
-  val aliceNodeId = PublicKey(hex"03af0ed6052cf28d670665549bc86f4b721c9fdb309d40c58f5811f63966e005d0")
-  val bobNodeId = PublicKey(hex"039dc0e0b1d25905e44fdf6f8e89755a5e219685840d0bc1d28d3308f9628a3585")
+  val aliceNodeId = PublicKey.fromHex("03af0ed6052cf28d670665549bc86f4b721c9fdb309d40c58f5811f63966e005d0")
+  val bobNodeId = PublicKey.fromHex("039dc0e0b1d25905e44fdf6f8e89755a5e219685840d0bc1d28d3308f9628a3585")
 
   class MockService(eclair: Eclair) extends Service {
     override val eclairApi: Eclair = eclair
@@ -108,7 +108,7 @@ class ApiServiceSpec extends AnyFunSuite with ScalatestRouteTest with IdiomaticM
         assert(handled)
         assert(status == BadRequest)
         val resp = entityAs[ErrorResponse](Json4sSupport.unmarshaller, ClassTag(classOf[ErrorResponse]))
-        assert(resp.error == "The form field 'channelId' was malformed:\nInvalid hexadecimal character 'h' at index 0")
+        assert(resp.error == "The form field 'channelId' was malformed:\nFailed requirement.")
       }
 
     // wrong params
@@ -177,7 +177,7 @@ class ApiServiceSpec extends AnyFunSuite with ScalatestRouteTest with IdiomaticM
       features = Features(Set(ActivatedFeature(OptionDataLossProtect, Mandatory), ActivatedFeature(ChannelRangeQueriesExtended, Optional))),
       nodeId = aliceNodeId,
       alias = "alice",
-      chainHash = ByteVector32(hex"06226e46111a0b59caaf126043eb5bbf28c34f3a5e332a1fc7b2b73cf188910f"),
+      chainHash = new ByteVector32("06226e46111a0b59caaf126043eb5bbf28c34f3a5e332a1fc7b2b73cf188910f"),
       network = "regtest",
       blockHeight = 9999,
       publicAddresses = NodeAddress.fromParts("localhost", 9731).get :: Nil,
@@ -202,7 +202,7 @@ class ApiServiceSpec extends AnyFunSuite with ScalatestRouteTest with IdiomaticM
     val channelId = "56d7d6eda04d80138270c49709f1eadb5ab4939e5061309ccdacdb98ce637d0e"
     val response = Map[ChannelIdentifier, Either[Throwable, ChannelCommandResponse]](
       Left(ByteVector32.fromValidHex(channelId)) -> Right(ChannelCommandResponse.ChannelClosed(ByteVector32.fromValidHex(channelId))),
-      Left(ByteVector32.fromValidHex(channelId).reverse) -> Left(new RuntimeException("channel not found")),
+      Left(ByteVector32.fromValidHex(channelId).reversed()) -> Left(new RuntimeException("channel not found")),
       Right(ShortChannelId(shortChannelIdSerialized)) -> Right(ChannelCommandResponse.ChannelClosed(ByteVector32.fromValidHex(channelId.reverse)))
     )
 
@@ -248,7 +248,7 @@ class ApiServiceSpec extends AnyFunSuite with ScalatestRouteTest with IdiomaticM
   }
 
   test("'connect' method should accept an URI and a triple with nodeId/host/port") {
-    val remoteNodeId = PublicKey(hex"030bb6a5e0c6b203c7e2180fb78c7ba4bdce46126761d8201b91ddac089cdecc87")
+    val remoteNodeId = PublicKey.fromHex("030bb6a5e0c6b203c7e2180fb78c7ba4bdce46126761d8201b91ddac089cdecc87")
     val remoteUri = NodeURI.parse("030bb6a5e0c6b203c7e2180fb78c7ba4bdce46126761d8201b91ddac089cdecc87@93.137.102.239:9735")
 
     val eclair = mock[Eclair]
@@ -430,7 +430,7 @@ class ApiServiceSpec extends AnyFunSuite with ScalatestRouteTest with IdiomaticM
     val expected = """{"paymentId":"487da196-a4dc-4b1e-92b4-3e5e905e9f3f","parentId":"2ad8c6d7-99cb-4238-8f67-89024b8eed0d"}"""
     val externalId = UUID.randomUUID().toString
     val pr = PaymentRequest(Block.LivenetGenesisBlock.hash, Some(1234 msat), ByteVector32.Zeroes, randomKey, "Some invoice")
-    val expectedRoute = List(PublicKey(hex"0217eb8243c95f5a3b7d4c5682d10de354b7007eb59b6807ae407823963c7547a9"), PublicKey(hex"0242a4ae0c5bef18048fbecf995094b74bfb0f7391418d71ed394784373f41e4f3"), PublicKey(hex"026ac9fcd64fb1aa1c491fc490634dc33da41d4a17b554e0adf1b32fee88ee9f28"))
+    val expectedRoute = List(PublicKey.fromHex("0217eb8243c95f5a3b7d4c5682d10de354b7007eb59b6807ae407823963c7547a9"), PublicKey.fromHex("0242a4ae0c5bef18048fbecf995094b74bfb0f7391418d71ed394784373f41e4f3"), PublicKey.fromHex("026ac9fcd64fb1aa1c491fc490634dc33da41d4a17b554e0adf1b32fee88ee9f28"))
     val csvNodes = "0217eb8243c95f5a3b7d4c5682d10de354b7007eb59b6807ae407823963c7547a9, 0242a4ae0c5bef18048fbecf995094b74bfb0f7391418d71ed394784373f41e4f3, 026ac9fcd64fb1aa1c491fc490634dc33da41d4a17b554e0adf1b32fee88ee9f28"
     val jsonNodes = serialization.write(expectedRoute)
 

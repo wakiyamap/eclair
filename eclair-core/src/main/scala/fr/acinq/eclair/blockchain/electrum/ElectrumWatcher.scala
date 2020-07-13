@@ -19,7 +19,7 @@ package fr.acinq.eclair.blockchain.electrum
 import java.util.concurrent.atomic.AtomicLong
 
 import akka.actor.{Actor, ActorLogging, ActorRef, Stash, Terminated}
-import fr.acinq.bitcoin.{BlockHeader, ByteVector32, Script, Transaction, TxIn, TxOut}
+import fr.acinq.bitcoin.{BlockHeader, BtcSerializer, ByteVector32, Script, Transaction, TxIn, TxOut}
 import fr.acinq.eclair.blockchain._
 import fr.acinq.eclair.blockchain.electrum.ElectrumClient.computeScriptHash
 import fr.acinq.eclair.channel.{BITCOIN_FUNDING_DEPTHOK, BITCOIN_PARENT_TX_CONFIRMED}
@@ -27,7 +27,8 @@ import fr.acinq.eclair.transactions.Scripts
 import fr.acinq.eclair.{LongToBtcAmount, ShortChannelId, TxCoordinates}
 
 import scala.collection.immutable.{Queue, SortedMap}
-
+import scala.collection.JavaConverters._
+import fr.acinq.eclair.KotlinUtils._
 
 class ElectrumWatcher(blockCount: AtomicLong, client: ActorRef) extends Actor with Stash with ActorLogging {
 
@@ -36,13 +37,13 @@ class ElectrumWatcher(blockCount: AtomicLong, client: ActorRef) extends Actor wi
   override def unhandled(message: Any): Unit = message match {
     case ValidateRequest(c) =>
       log.info(s"blindly validating channel=$c")
-      val pubkeyScript = Script.write(Script.pay2wsh(Scripts.multiSig2of2(c.bitcoinKey1, c.bitcoinKey2)))
+      val pubkeyScript = Script.write(Script.pay2wsh(Scripts.multiSig2of2(c.bitcoinKey1, c.bitcoinKey2).asJava))
       val TxCoordinates(_, _, outputIndex) = ShortChannelId.coordinates(c.shortChannelId)
-      val fakeFundingTx = Transaction(
-        version = 2,
-        txIn = Seq.empty[TxIn],
-        txOut = List.fill(outputIndex + 1)(TxOut(0 sat, pubkeyScript)), // quick and dirty way to be sure that the outputIndex'th output is of the expected format
-        lockTime = 0)
+      val fakeFundingTx = new Transaction(
+        2,
+        List.empty[TxIn],
+        List.fill(outputIndex + 1)(new TxOut(0 sat, pubkeyScript)), // quick and dirty way to be sure that the outputIndex'th output is of the expected format
+        0)
       sender ! ValidateResult(c, Right((fakeFundingTx, UtxoStatus.Unspent)))
 
     case _ => log.warning(s"unhandled message $message")
@@ -121,7 +122,7 @@ class ElectrumWatcher(blockCount: AtomicLong, client: ActorRef) extends Actor wi
 
     case ElectrumClient.GetTransactionResponse(tx, Some(item: ElectrumClient.TransactionHistoryItem)) =>
       // this is for WatchSpent/WatchSpendBasic
-      val watchSpentTriggered = tx.txIn.map(_.outPoint).flatMap(outPoint => watches.collect {
+      val watchSpentTriggered = tx.txIn.asScala.map(_.outPoint).flatMap(outPoint => watches.collect {
         case WatchSpent(channel, txid, pos, _, event) if txid == outPoint.txid && pos == outPoint.index.toInt =>
           log.info(s"output $txid:$pos spent by transaction ${tx.txid}")
           channel ! WatchEventSpent(event, tx)
@@ -177,9 +178,9 @@ class ElectrumWatcher(blockCount: AtomicLong, client: ActorRef) extends Actor wi
       val csvTimeout = Scripts.csvTimeout(tx)
       if (csvTimeout > 0) {
         require(tx.txIn.size == 1, s"watcher only supports tx with 1 input, this tx has ${tx.txIn.size} inputs")
-        val parentTxid = tx.txIn(0).outPoint.txid
+        val parentTxid = tx.txIn.get(0).outPoint.txid
         log.info(s"txid=${tx.txid} has a relative timeout of $csvTimeout blocks, watching parenttxid=$parentTxid tx=$tx")
-        val parentPublicKeyScript = WatchConfirmed.extractPublicKeyScript(tx.txIn.head.witness)
+        val parentPublicKeyScript = WatchConfirmed.extractPublicKeyScript(tx.txIn.get(0).witness)
         self ! WatchConfirmed(self, parentTxid, parentPublicKeyScript, minDepth = 1, BITCOIN_PARENT_TX_CONFIRMED(tx))
       } else if (cltvTimeout > blockCount) {
         log.info(s"delaying publication of txid=${tx.txid} until block=$cltvTimeout (curblock=$blockCount)")
@@ -238,7 +239,7 @@ object ElectrumWatcher {
     // collisions mean that users may temporarily see incorrect numbers for their 0-conf channels (until they've been confirmed)
     // if this ever becomes a problem we could just extract some bits for our dummy height instead of just returning 0
     val height = 0
-    val txIndex = txid.bits.sliceToInt(0, 16, false)
+    val txIndex = (txid.get(0) * 256 + txid.get(1)) & 0xffff // TODO: txid.bits.sliceToInt(0, 16, false)
     (height, txIndex)
   }
 }

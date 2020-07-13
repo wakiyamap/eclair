@@ -16,7 +16,7 @@
 
 package fr.acinq.eclair.payment
 
-import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
+import fr.acinq.bitcoin.{PrivateKey, PublicKey}
 import fr.acinq.bitcoin.{Base58, Base58Check, Bech32, Block, ByteVector32, ByteVector64, Crypto}
 import fr.acinq.eclair.payment.PaymentRequest._
 import fr.acinq.eclair.{CltvExpiryDelta, FeatureSupport, Features, LongToBtcAmount, MilliSatoshi, ShortChannelId, randomBytes32}
@@ -39,6 +39,7 @@ import scala.util.Try
  * @param signature request signature that will be checked against node id
  */
 case class PaymentRequest(prefix: String, amount: Option[MilliSatoshi], timestamp: Long, nodeId: PublicKey, tags: List[PaymentRequest.TaggedField], signature: ByteVector) {
+
 
   amount.foreach(a => require(a > 0.msat, s"amount is not valid"))
   require(tags.collect { case _: PaymentRequest.PaymentHash => }.size == 1, "there must be exactly one payment hash tag")
@@ -99,7 +100,7 @@ case class PaymentRequest(prefix: String, amount: Option[MilliSatoshi], timestam
     val data = Bolt11Data(timestamp, tags, ByteVector.fill(65)(0)) // fake sig that we are going to strip next
     val bin = Codecs.bolt11DataCodec.encode(data).require
     val message = ByteVector.view(hrp) ++ bin.dropRight(520).toByteVector
-    Crypto.sha256(message)
+    new ByteVector32(Crypto.sha256(message.toArray))
   }
 
   /**
@@ -107,15 +108,16 @@ case class PaymentRequest(prefix: String, amount: Option[MilliSatoshi], timestam
    * @return a signed payment request
    */
   def sign(priv: PrivateKey): PaymentRequest = {
-    val sig64 = Crypto.sign(hash, priv)
-    val (pub1, _) = Crypto.recoverPublicKey(sig64, hash)
+    val sig64 = Crypto.sign(hash.toByteArray, priv)
+    val pub1 = Crypto.recoverPublicKey(sig64, hash.toByteArray).getFirst()
     val recid = if (nodeId == pub1) 0.toByte else 1.toByte
-    val signature = sig64 :+ recid
+    val signature = ByteVector.view(sig64.toByteArray) :+ recid
     this.copy(signature = signature)
   }
 }
 
 object PaymentRequest {
+  implicit def bytevector2bytearray(input: ByteVector): Array[Byte] = input.toArray
 
   val DEFAULT_EXPIRY_SECONDS = 3600
 
@@ -232,8 +234,14 @@ object PaymentRequest {
       Try(fromBase58Address(address)).orElse(Try(fromBech32Address(address))).get
     }
 
+    def apply(version: Byte, data: Array[Byte]): FallbackAddress = {
+      new FallbackAddress(version, ByteVector.view(data))
+    }
+
     def fromBase58Address(address: String): FallbackAddress = {
-      val (prefix, hash) = Base58Check.decode(address)
+      val pair = Base58Check.decode(address)
+      val prefix: Byte = pair.getFirst
+      val hash: Array[Byte] = pair.getSecond
       prefix match {
         case Base58.Prefix.PubkeyAddress => FallbackAddress(17.toByte, hash)
         case Base58.Prefix.PubkeyAddressTestnet => FallbackAddress(17.toByte, hash)
@@ -243,7 +251,8 @@ object PaymentRequest {
     }
 
     def fromBech32Address(address: String): FallbackAddress = {
-      val (_, version, hash) = Bech32.decodeWitnessAddress(address)
+      val triple = Bech32.decodeWitnessAddress(address)
+      val (version, hash) = (triple.getSecond, triple.getThird)
       FallbackAddress(version, hash)
     }
 
@@ -495,7 +504,7 @@ object PaymentRequest {
     val prefix: String = prefixes.values.find(prefix => hrp.startsWith(prefix)).getOrElse(throw new RuntimeException("unknown prefix"))
     val data = string2Bits(lowercaseInput.slice(separatorIndex + 1, lowercaseInput.length - 6)) // 6 == checksum size
     val bolt11Data = Codecs.bolt11DataCodec.decode(data).require.value
-    val signature = ByteVector64(bolt11Data.signature.take(64))
+    val signature = new ByteVector64(bolt11Data.signature.take(64))
     val message: ByteVector = ByteVector.view(hrp.getBytes) ++ data.dropRight(520).toByteVector // we drop the sig bytes
     val recid = bolt11Data.signature.last
     val pub = Crypto.recoverPublicKey(signature, Crypto.sha256(message), recid)
@@ -561,8 +570,8 @@ object PaymentRequest {
     val hramount = Amount.encode(pr.amount)
     val hrp = s"${pr.prefix}$hramount"
     val data = Codecs.bolt11DataCodec.encode(Bolt11Data(pr.timestamp, pr.tags, pr.signature)).require
-    val int5s = eight2fiveCodec.decode(data).require.value
-    Bech32.encode(hrp, int5s.toArray)
+    val int5s = eight2fiveCodec.decode(data).require.value.toArray
+    Bech32.encode(hrp, int5s)
   }
 }
 

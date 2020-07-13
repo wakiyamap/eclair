@@ -79,7 +79,7 @@ class MultiPartHandlerSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike 
       assert(incoming.isDefined)
       assert(incoming.get.status === IncomingPaymentStatus.Pending)
       assert(!incoming.get.paymentRequest.isExpired)
-      assert(Crypto.sha256(incoming.get.paymentPreimage) === pr.paymentHash)
+      assert(pr.paymentHash.contentEquals(Crypto.sha256(incoming.get.paymentPreimage)))
 
       val add = UpdateAddHtlc(ByteVector32.One, 0, amountMsat, pr.paymentHash, defaultExpiry, TestConstants.emptyOnionPacket)
       sender.send(normalHandler, IncomingPacket.FinalPacket(add, Onion.FinalLegacyPayload(add.amountMsat, add.cltvExpiry)))
@@ -286,7 +286,7 @@ class MultiPartHandlerSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike 
     val pr = sender.expectMsgType[PaymentRequest]
     assert(pr.features.allowMultiPart)
 
-    val add = UpdateAddHtlc(ByteVector32.One, 0, 800 msat, pr.paymentHash.reverse, defaultExpiry, TestConstants.emptyOnionPacket)
+    val add = UpdateAddHtlc(ByteVector32.One, 0, 800 msat, pr.paymentHash.reversed(), defaultExpiry, TestConstants.emptyOnionPacket)
     sender.send(mppHandler, IncomingPacket.FinalPacket(add, Onion.createMultiPartPayload(add.amountMsat, 1000 msat, add.cltvExpiry, pr.paymentSecret.get)))
     val cmd = register.expectMsgType[Register.Forward[CMD_FAIL_HTLC]].message
     assert(cmd.reason == Right(IncorrectOrUnknownPaymentDetails(1000 msat, nodeParams.currentBlockHeight)))
@@ -330,7 +330,7 @@ class MultiPartHandlerSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike 
 
     // Invalid payment secret.
     val add = UpdateAddHtlc(ByteVector32.One, 0, 800 msat, pr.paymentHash, defaultExpiry, TestConstants.emptyOnionPacket)
-    sender.send(mppHandler, IncomingPacket.FinalPacket(add, Onion.createMultiPartPayload(add.amountMsat, 1000 msat, add.cltvExpiry, pr.paymentSecret.get.reverse)))
+    sender.send(mppHandler, IncomingPacket.FinalPacket(add, Onion.createMultiPartPayload(add.amountMsat, 1000 msat, add.cltvExpiry, pr.paymentSecret.get.reversed())))
     val cmd = register.expectMsgType[Register.Forward[CMD_FAIL_HTLC]].message
     assert(cmd.reason == Right(IncorrectOrUnknownPaymentDetails(1000 msat, nodeParams.currentBlockHeight)))
     assert(nodeParams.db.payments.getIncomingPayment(pr.paymentHash).get.status === IncomingPaymentStatus.Pending)
@@ -385,7 +385,7 @@ class MultiPartHandlerSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike 
     f.sender.send(handler, IncomingPacket.FinalPacket(add1, Onion.createMultiPartPayload(add1.amountMsat, 1000 msat, add1.cltvExpiry, pr.paymentSecret.get)))
     // Invalid payment secret -> should be rejected.
     val add2 = UpdateAddHtlc(ByteVector32.Zeroes, 42, 200 msat, pr.paymentHash, f.defaultExpiry, TestConstants.emptyOnionPacket)
-    f.sender.send(handler, IncomingPacket.FinalPacket(add2, Onion.createMultiPartPayload(add2.amountMsat, 1000 msat, add2.cltvExpiry, pr.paymentSecret.get.reverse)))
+    f.sender.send(handler, IncomingPacket.FinalPacket(add2, Onion.createMultiPartPayload(add2.amountMsat, 1000 msat, add2.cltvExpiry, pr.paymentSecret.get.reversed())))
     val add3 = add2.copy(id = 43)
     f.sender.send(handler, IncomingPacket.FinalPacket(add3, Onion.createMultiPartPayload(add3.amountMsat, 1000 msat, add3.cltvExpiry, pr.paymentSecret.get)))
 
@@ -393,7 +393,7 @@ class MultiPartHandlerSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike 
     val cmd1 = f.register.expectMsgType[Register.Forward[CMD_FULFILL_HTLC]]
     assert(cmd1.message.id === add1.id)
     assert(cmd1.channelId === add1.channelId)
-    assert(Crypto.sha256(cmd1.message.r) === pr.paymentHash)
+    assert(pr.paymentHash.contentEquals(Crypto.sha256(cmd1.message.r)))
     f.register.expectMsg(Register.Forward(add3.channelId, CMD_FULFILL_HTLC(add3.id, cmd1.message.r, commit = true)))
 
     val paymentReceived = f.eventListener.expectMsgType[PaymentReceived]
@@ -441,7 +441,7 @@ class MultiPartHandlerSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike 
     val cmd1 = f.register.expectMsgType[Register.Forward[CMD_FULFILL_HTLC]]
     assert(cmd1.channelId === add2.channelId)
     assert(cmd1.message.id === 2)
-    assert(Crypto.sha256(cmd1.message.r) === pr.paymentHash)
+    assert(pr.paymentHash.contentEquals(Crypto.sha256(cmd1.message.r)))
     f.register.expectMsg(Register.Forward(add3.channelId, CMD_FULFILL_HTLC(5, cmd1.message.r, commit = true)))
 
     val paymentReceived = f.eventListener.expectMsgType[PaymentReceived]

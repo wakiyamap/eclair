@@ -44,11 +44,11 @@ class SqliteChannelsDbSpec extends AnyFunSuite {
 
       val channel = ChannelCodecsSpec.normal
 
-      val commitNumber = 42
-      val paymentHash1 = ByteVector32.Zeroes
-      val cltvExpiry1 = CltvExpiry(123)
-      val paymentHash2 = ByteVector32(ByteVector.fill(32)(1))
-      val cltvExpiry2 = CltvExpiry(656)
+    val commitNumber = 42
+    val paymentHash1 = ByteVector32.Zeroes
+    val cltvExpiry1 = CltvExpiry(123)
+    val paymentHash2 = new ByteVector32("01" * 32)
+    val cltvExpiry2 = CltvExpiry(656)
 
       intercept[SQLException](db.addHtlcInfo(channel.channelId, commitNumber, paymentHash1, cltvExpiry1)) // no related channel
 
@@ -88,7 +88,7 @@ class SqliteChannelsDbSpec extends AnyFunSuite {
         val channel = ChannelCodecsSpec.normal
         val data = stateDataCodec.encode(channel).require.toByteArray
         using(sqlite.prepareStatement("INSERT INTO local_channels VALUES (?, ?)")) { statement =>
-          statement.setBytes(1, channel.channelId.toArray)
+          statement.setBytes(1, channel.channelId.toByteArray)
           statement.setBytes(2, data)
           statement.executeUpdate()
         }

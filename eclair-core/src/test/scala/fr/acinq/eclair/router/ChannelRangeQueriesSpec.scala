@@ -31,6 +31,7 @@ import scala.collection.immutable.{SortedMap, SortedSet}
 import scala.collection.mutable.ArrayBuffer
 import scala.compat.Platform
 import scala.util.Random
+import fr.acinq.eclair.KotlinUtils._
 
 
 class ChannelRangeQueriesSpec extends AnyFunSuite {

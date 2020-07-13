@@ -18,7 +18,7 @@ package fr.acinq.eclair.blockchain.electrum
 
 import java.math.BigInteger
 
-import fr.acinq.bitcoin.{Block, BlockHeader, ByteVector32, decodeCompact}
+import fr.acinq.bitcoin.{Block, BlockHeader, ByteVector32, UInt256}
 import fr.acinq.eclair.blockchain.electrum.db.HeaderDb
 import grizzled.slf4j.Logging
 
@@ -93,12 +93,12 @@ object Blockchain extends Logging {
     * @param parent    parent block
     * @param chainwork cumulative chain work up to and including this block
     */
-  case class BlockIndex(header: BlockHeader, height: Int, parent: Option[BlockIndex], chainwork: BigInt) {
+  case class BlockIndex(header: BlockHeader, height: Int, parent: Option[BlockIndex], chainwork: UInt256) {
     lazy val hash = header.hash
 
     lazy val blockId = header.blockId
 
-    lazy val logwork = if (chainwork == 0) 0.0 else Math.log(chainwork.doubleValue) / Math.log(2.0)
+    lazy val logwork = if (chainwork == 0) 0.0 else Math.log(chainwork.toDouble()) / Math.log(2.0)
 
     override def toString = s"BlockIndex($blockId, $height, ${parent.map(_.blockId)}, $logwork)"
   }
@@ -120,7 +120,7 @@ object Blockchain extends Logging {
   def fromGenesisBlock(chainhash: ByteVector32, genesis: BlockHeader): Blockchain = {
     require(chainhash == Block.RegtestGenesisBlock.hash)
     // the height of the genesis block is 0
-    val blockIndex = BlockIndex(genesis, 0, None, decodeCompact(genesis.bits)._1)
+    val blockIndex = BlockIndex(genesis, 0, None, UInt256.decodeCompact(genesis.bits).getFirst)
     Blockchain(chainhash, Vector(), Map(blockIndex.hash -> blockIndex), Vector(blockIndex))
   }
 
@@ -166,9 +166,8 @@ object Blockchain extends Logging {
         require(current.hashPreviousBlock == previous.hash)
         // on mainnet all blocks with a re-targeting window have the same difficulty target
         // on testnet it doesn't hold, there can be a drop in difficulty if there are no blocks for 20 minutes
-        blockchain.chainHash match {
-          case Block.LivenetGenesisBlock | Block.RegtestGenesisBlock.hash => require(current.bits == previous.bits)
-          case _ => ()
+        if (blockchain.chainHash == Block.LivenetGenesisBlock.hash || blockchain.chainHash == Block.RegtestGenesisBlock.hash) {
+          require(current.bits == previous.bits)
         }
         current
     }
@@ -213,10 +212,24 @@ object Blockchain extends Logging {
         // checkpoints are (block hash, * next * difficulty target), this is why:
         // - we duplicate the first checkpoints because all headers in the first chunks on mainnet had the same difficulty target
         // - we drop the last checkpoint
-        val chainwork = (blockchain.checkpoints(0) +: blockchain.checkpoints.dropRight(1)).map(t => BigInt(RETARGETING_PERIOD) * Blockchain.chainWork(t.nextBits)).sum
-        val blockIndex = BlockIndex(headers.head, height, None, chainwork + Blockchain.chainWork(headers.head))
+        val chainwork = {
+          val cp = (blockchain.checkpoints(0) +: blockchain.checkpoints.dropRight(1))
+          val values = cp.map(c => {
+            val w = Blockchain.chainWork(c.nextBits)
+            w.timesAssign(new UInt256(RETARGETING_PERIOD))
+            w
+          })
+          val sum = new UInt256()
+          values.foreach(v => sum.plusAssign(v))
+          sum
+        }
+        chainwork.plusAssign(Blockchain.chainWork(headers.head))
+        val blockIndex = BlockIndex(headers.head, height, None, chainwork)
         val bestchain1 = headers.tail.foldLeft(Vector(blockIndex)) {
-          case (indexes, header) => indexes :+ BlockIndex(header, indexes.last.height + 1, Some(indexes.last), indexes.last.chainwork + Blockchain.chainWork(header))
+          case (indexes, header) =>
+            val chainwork = indexes.last.chainwork
+            chainwork.plusAssign(Blockchain.chainWork(header))
+            indexes :+ BlockIndex(header, indexes.last.height + 1, Some(indexes.last), chainwork)
         }
         val headersMap1 = blockchain.headersMap ++ bestchain1.map(bi => bi.hash -> bi)
         blockchain.copy(bestchain = bestchain1, headersMap = headersMap1)
@@ -225,9 +238,14 @@ object Blockchain extends Logging {
       case _ if height == blockchain.height + 1 =>
         // attach at our best chain
         require(headers.head.hashPreviousBlock == blockchain.bestchain.last.hash)
-        val blockIndex = BlockIndex(headers.head, height, None, blockchain.bestchain.last.chainwork + Blockchain.chainWork(headers.head))
+        val chainwork = blockchain.bestchain.last.chainwork
+        chainwork.plusAssign(Blockchain.chainWork(headers.head))
+        val blockIndex = BlockIndex(headers.head, height, None, chainwork)
         val indexes = headers.tail.foldLeft(Vector(blockIndex)) {
-          case (indexes, header) => indexes :+ BlockIndex(header, indexes.last.height + 1, Some(indexes.last), indexes.last.chainwork + Blockchain.chainWork(header))
+          case (indexes, header) =>
+            val chainwork = indexes.last.chainwork
+            chainwork.plusAssign(Blockchain.chainWork(header))
+            indexes :+ BlockIndex(header, indexes.last.height + 1, Some(indexes.last), chainwork)
         }
         val bestchain1 = blockchain.bestchain ++ indexes
         val headersMap1 = blockchain.headersMap ++ indexes.map(bi => bi.hash -> bi)
@@ -246,13 +264,15 @@ object Blockchain extends Logging {
           // we only check this on mainnet, on testnet rules are much more lax
           require(header.bits == parent.header.bits, s"header invalid difficulty target for ${header}, it should be ${parent.header.bits}")
         }
-        val blockIndex = BlockIndex(header, height, Some(parent), parent.chainwork + Blockchain.chainWork(header))
+        val chainwork = parent.chainwork
+        chainwork.plusAssign(Blockchain.chainWork(header))
+        val blockIndex = BlockIndex(header, height, Some(parent), chainwork)
         val headersMap1 = blockchain.headersMap + (blockIndex.hash -> blockIndex)
         val bestChain1 = if (parent == blockchain.bestchain.last) {
           // simplest case: we add to our current best chain
           logger.info(s"new tip at $blockIndex")
           blockchain.bestchain :+ blockIndex
-        } else if (blockIndex.chainwork > blockchain.bestchain.last.chainwork) {
+        } else if (blockIndex.chainwork.compareTo(blockchain.bestchain.last.chainwork) > 0) {
           logger.info(s"new best chain at $blockIndex")
           // we have a new best chain
           buildChain(blockIndex)
@@ -296,14 +316,11 @@ object Blockchain extends Logging {
     }
   }
 
-  def chainWork(target: BigInt): BigInt = BigInt(2).pow(256) / (target + BigInt(1))
+  //def chainWork(target: BigInt): BigInt = BigInt(2).pow(256) / (target + BigInt(1))
 
-  def chainWork(bits: Long): BigInt = {
-    val (target, negative, overflow) = decodeCompact(bits)
-    if (target == BigInteger.ZERO || negative || overflow) BigInt(0) else chainWork(target)
-  }
+  def chainWork(bits: Long): UInt256 = BlockHeader.blockProof(bits)
 
-  def chainWork(header: BlockHeader): BigInt = chainWork(header.bits)
+  def chainWork(header: BlockHeader): UInt256 = chainWork(header.bits)
 
   /**
     * Optimize blockchain

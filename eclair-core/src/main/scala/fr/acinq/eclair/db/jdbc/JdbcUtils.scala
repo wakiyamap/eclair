@@ -19,11 +19,11 @@ package fr.acinq.eclair.db.jdbc
 import java.sql.{Connection, ResultSet, Statement}
 import java.util.UUID
 
-import fr.acinq.bitcoin.ByteVector32
+import fr.acinq.bitcoin.{ByteVector, ByteVector32}
 import fr.acinq.eclair.MilliSatoshi
 import javax.sql.DataSource
 import scodec.Codec
-import scodec.bits.{BitVector, ByteVector}
+import scodec.bits.BitVector
 
 import scala.collection.immutable.Queue
 
@@ -77,35 +77,35 @@ trait JdbcUtils {
 
     def getByteVectorFromHex(columnLabel: String): ByteVector = {
       val s = rs.getString(columnLabel).stripPrefix("\\x")
-      ByteVector.fromValidHex(s)
+      new ByteVector(s)
     }
 
     def getByteVector32FromHex(columnLabel: String): ByteVector32 = {
       val s = rs.getString(columnLabel)
-      ByteVector32(ByteVector.fromValidHex(s))
+      new ByteVector32(s)
     }
 
     def getByteVector32FromHexNullable(columnLabel: String): Option[ByteVector32] = {
       val s = rs.getString(columnLabel)
       if (rs.wasNull()) None else {
-        Some(ByteVector32(ByteVector.fromValidHex(s)))
+        Some(new ByteVector32(s))
       }
     }
 
     def getBitVectorOpt(columnLabel: String): Option[BitVector] = Option(rs.getBytes(columnLabel)).map(BitVector(_))
 
-    def getByteVector(columnLabel: String): ByteVector = ByteVector(rs.getBytes(columnLabel))
+    def getByteVector(columnLabel: String): ByteVector = new ByteVector(rs.getBytes(columnLabel))
 
     def getByteVectorNullable(columnLabel: String): ByteVector = {
       val result = rs.getBytes(columnLabel)
-      if (rs.wasNull()) ByteVector.empty else ByteVector(result)
+      if (rs.wasNull()) ByteVector.empty else new ByteVector(result)
     }
 
-    def getByteVector32(columnLabel: String): ByteVector32 = ByteVector32(ByteVector(rs.getBytes(columnLabel)))
+    def getByteVector32(columnLabel: String): ByteVector32 = new ByteVector32(rs.getBytes(columnLabel))
 
     def getByteVector32Nullable(columnLabel: String): Option[ByteVector32] = {
       val bytes = rs.getBytes(columnLabel)
-      if (rs.wasNull()) None else Some(ByteVector32(ByteVector(bytes)))
+      if (rs.wasNull()) None else Some(new ByteVector32(bytes))
     }
 
     def getStringNullable(columnLabel: String): Option[String] = {

@@ -16,7 +16,7 @@
 
 package fr.acinq.eclair.db.pg
 
-import fr.acinq.bitcoin.{ByteVector32, Crypto, Satoshi}
+import fr.acinq.bitcoin.{ByteVector32, Crypto, PublicKey, Satoshi}
 import fr.acinq.eclair.ShortChannelId
 import fr.acinq.eclair.db.Monitoring.Metrics.withMetrics
 import fr.acinq.eclair.db.NetworkDb
@@ -68,7 +68,7 @@ class PgNetworkDb(implicit ds: DataSource) extends NetworkDb with Logging {
     }
   }
 
-  override def getNode(nodeId: Crypto.PublicKey): Option[NodeAnnouncement] = withMetrics("network/get-node") {
+  override def getNode(nodeId: PublicKey): Option[NodeAnnouncement] = withMetrics("network/get-node") {
     inTransaction { pg =>
       using(pg.prepareStatement("SELECT data FROM nodes WHERE node_id=?")) { statement =>
         statement.setString(1, nodeId.value.toHex)
@@ -78,7 +78,7 @@ class PgNetworkDb(implicit ds: DataSource) extends NetworkDb with Logging {
     }
   }
 
-  override def removeNode(nodeId: Crypto.PublicKey): Unit = withMetrics("network/remove-node") {
+  override def removeNode(nodeId: PublicKey): Unit = withMetrics("network/remove-node") {
     inTransaction { pg =>
       using(pg.prepareStatement("DELETE FROM nodes WHERE node_id=?")) { statement =>
         statement.setString(1, nodeId.value.toHex)
@@ -130,7 +130,7 @@ class PgNetworkDb(implicit ds: DataSource) extends NetworkDb with Logging {
           val capacity = rs.getLong("capacity_sat")
           val channel_update_1_opt = rs.getBitVectorOpt("channel_update_1").map(channelUpdateCodec.decode(_).require.value)
           val channel_update_2_opt = rs.getBitVectorOpt("channel_update_2").map(channelUpdateCodec.decode(_).require.value)
-          m = m + (ann.shortChannelId -> PublicChannel(ann, txId, Satoshi(capacity), channel_update_1_opt, channel_update_2_opt, None))
+          m = m + (ann.shortChannelId -> PublicChannel(ann, txId, new Satoshi(capacity), channel_update_1_opt, channel_update_2_opt, None))
         }
         m
       }

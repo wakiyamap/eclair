@@ -22,7 +22,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 import com.google.common.net.HostAndPort
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.PublicKey
 import fr.acinq.bitcoin.Satoshi
 import fr.acinq.eclair.NodeParams.{BITCOIND, ELECTRUM}
 import fr.acinq.eclair.gui.stages._

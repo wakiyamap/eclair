@@ -19,7 +19,7 @@ package fr.acinq.eclair.channel.states
 import java.util.UUID
 
 import akka.testkit.{TestFSMRef, TestKitBase, TestProbe}
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.PublicKey
 import fr.acinq.bitcoin.{ByteVector32, Crypto, ScriptFlags, Transaction}
 import fr.acinq.eclair.FeatureSupport.Optional
 import fr.acinq.eclair.Features.StaticRemoteKey
@@ -37,6 +37,8 @@ import org.scalatest.{FixtureTestSuite, ParallelTestExecution}
 import scodec.bits._
 
 import scala.concurrent.duration._
+import fr.acinq.eclair.KotlinUtils._
+
 
 /**
  * Created by PM on 23/08/2016.
@@ -127,7 +129,7 @@ trait StateTestsHelperMethods extends TestKitBase with FixtureTestSuite with Par
   }
 
   def makeCmdAdd(amount: MilliSatoshi, destination: PublicKey, currentBlockHeight: Long, paymentPreimage: ByteVector32 = randomBytes32, upstream: Upstream = Upstream.Local(UUID.randomUUID)): (ByteVector32, CMD_ADD_HTLC) = {
-    val paymentHash: ByteVector32 = Crypto.sha256(paymentPreimage)
+    val paymentHash: ByteVector32 = paymentPreimage.sha256()
     val expiry = CltvExpiryDelta(144).toCltvExpiry(currentBlockHeight)
     val cmd = OutgoingPacket.buildCommand(upstream, paymentHash, ChannelHop(null, destination, null) :: Nil, FinalLegacyPayload(amount, expiry))._1.copy(commit = false)
     (paymentPreimage, cmd)

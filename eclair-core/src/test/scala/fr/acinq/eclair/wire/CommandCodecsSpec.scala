@@ -19,12 +19,14 @@ package fr.acinq.eclair.wire
 import fr.acinq.eclair.channel._
 import fr.acinq.eclair.{randomBytes, randomBytes32}
 import org.scalatest.funsuite.AnyFunSuite
+import scodec.bits.ByteVector
 
 /**
  * Created by PM on 31/05/2016.
  */
 
 class CommandCodecsSpec extends AnyFunSuite {
+  implicit def bytevarray2bytevector(input: Array[Byte]) : ByteVector = ByteVector.view(input)
 
   test("encode/decode all channel messages") {
     val msgs: List[Command with HasHtlcId] =

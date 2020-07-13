@@ -23,8 +23,8 @@ import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.{TestKit, TestProbe}
 import com.google.common.net.HostAndPort
 import com.typesafe.config.{Config, ConfigFactory}
-import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
-import fr.acinq.bitcoin.{Base58, Base58Check, Bech32, Block, ByteVector32, Crypto, OP_0, OP_CHECKSIG, OP_DUP, OP_EQUAL, OP_EQUALVERIFY, OP_HASH160, OP_PUSHDATA, Satoshi, Script, ScriptFlags, Transaction}
+import fr.acinq.bitcoin.{PrivateKey, PublicKey}
+import fr.acinq.bitcoin.{Base58, Base58Check, Bech32, Block, ByteVector32, Crypto, Hex, OP_0, OP_CHECKSIG, OP_DUP, OP_EQUAL, OP_EQUALVERIFY, OP_HASH160, OP_PUSHDATA, Satoshi, Script, ScriptFlags, Transaction}
 import fr.acinq.eclair.Features._
 import fr.acinq.eclair.blockchain.bitcoind.BitcoindService
 import fr.acinq.eclair.blockchain.bitcoind.BitcoindService.BitcoinReq
@@ -64,6 +64,7 @@ import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
+import fr.acinq.eclair.KotlinUtils._
 
 /**
  * Created by PM on 15/03/2017.
@@ -872,7 +873,7 @@ class IntegrationSpec extends TestKitBaseClass with BitcoindService with AnyFunS
     val toRemoteAddress = Script.pay2wpkh(initialStateDataF6.commitments.remoteParams.paymentBasepoint)
 
     // toRemote output of C as seen by F6
-    val Some(toRemoteOutC) = initialStateDataF6.commitments.localCommit.publishableTxs.commitTx.tx.txOut.find(_.publicKeyScript == Script.write(toRemoteAddress))
+    val Some(toRemoteOutC) = initialStateDataF6.commitments.localCommit.publishableTxs.commitTx.tx.txOut.find(_.publicKeyScript.contentEquals(Script.write(toRemoteAddress)))
 
     // let's make a payment to advance the commit index
     val amountMsat = 4200000.msat
@@ -889,7 +890,7 @@ class IntegrationSpec extends TestKitBaseClass with BitcoindService with AnyFunS
     val stateDataF6 = sender.expectMsgType[DATA_NORMAL]
     val commitmentIndex = stateDataF6.commitments.localCommit.index
     val commitTx = stateDataF6.commitments.localCommit.publishableTxs.commitTx.tx
-    val Some(toRemoteOutCNew) = commitTx.txOut.find(_.publicKeyScript == Script.write(toRemoteAddress))
+    val Some(toRemoteOutCNew) = commitTx.txOut.find(_.publicKeyScript.contentEquals(Script.write(toRemoteAddress)))
 
     // there is a new commitment index in the channel state
     assert(commitmentIndex == initialCommitmentIndex + 1)
@@ -924,13 +925,13 @@ class IntegrationSpec extends TestKitBaseClass with BitcoindService with AnyFunS
   /**
    * We currently use p2pkh script Helpers.getFinalScriptPubKey
    */
-  def scriptPubKeyToAddress(scriptPubKey: ByteVector) = Script.parse(scriptPubKey) match {
-    case OP_DUP :: OP_HASH160 :: OP_PUSHDATA(pubKeyHash, _) :: OP_EQUALVERIFY :: OP_CHECKSIG :: Nil =>
-      Base58Check.encode(Base58.Prefix.PubkeyAddressTestnet, pubKeyHash)
-    case OP_HASH160 :: OP_PUSHDATA(scriptHash, _) :: OP_EQUAL :: Nil =>
-      Base58Check.encode(Base58.Prefix.ScriptAddressTestnet, scriptHash)
-    case OP_0 :: OP_PUSHDATA(pubKeyHash, _) :: Nil if pubKeyHash.length == 20 => Bech32.encodeWitnessAddress("bcrt", 0, pubKeyHash)
-    case OP_0 :: OP_PUSHDATA(scriptHash, _) :: Nil if scriptHash.length == 32 => Bech32.encodeWitnessAddress("bcrt", 0, scriptHash)
+  def scriptPubKeyToAddress(scriptPubKey: ByteVector) = Script.parse(scriptPubKey.toArray).toList match {
+    case OP_DUP.INSTANCE :: OP_HASH160.INSTANCE :: op :: OP_EQUALVERIFY.INSTANCE :: OP_CHECKSIG.INSTANCE :: Nil if op.isPush(20) =>
+      Base58Check.encode(Base58.Prefix.PubkeyAddressTestnet, op.asInstanceOf[OP_PUSHDATA].data)
+    case OP_HASH160.INSTANCE :: op :: OP_EQUAL.INSTANCE :: Nil if op.isPush(20) =>
+      Base58Check.encode(Base58.Prefix.ScriptAddressTestnet, op.asInstanceOf[OP_PUSHDATA].data)
+    case OP_0.INSTANCE :: op :: Nil if op.isPush(20) => Bech32.encodeWitnessAddress("bcrt", 0, op.asInstanceOf[OP_PUSHDATA].data.toByteArray)
+    case OP_0.INSTANCE :: op :: Nil if op.isPush(32) => Bech32.encodeWitnessAddress("bcrt", 0, op.asInstanceOf[OP_PUSHDATA].data.toByteArray)
     case _ => ???
   }
 
@@ -946,7 +947,7 @@ class IntegrationSpec extends TestKitBaseClass with BitcoindService with AnyFunS
     val htlcReceiver = TestProbe()
     nodes("F1").paymentHandler ! new ForwardHandler(htlcReceiver.ref)
     val preimage = randomBytes32
-    val paymentHash = Crypto.sha256(preimage)
+    val paymentHash = new ByteVector32(Crypto.sha256(preimage))
     // A sends a payment to F
     val paymentReq = SendPaymentRequest(100000000 msat, paymentHash, nodes("F1").nodeParams.nodeId, maxAttempts = 3, routeParams = integrationTestRouteParams)
     val paymentSender = TestProbe()
@@ -1027,7 +1028,7 @@ class IntegrationSpec extends TestKitBaseClass with BitcoindService with AnyFunS
     val htlcReceiver = TestProbe()
     nodes("F2").paymentHandler ! new ForwardHandler(htlcReceiver.ref)
     val preimage = randomBytes32
-    val paymentHash = Crypto.sha256(preimage)
+    val paymentHash = new ByteVector32(Crypto.sha256(preimage))
     // A sends a payment to F
     val paymentReq = SendPaymentRequest(100000000 msat, paymentHash, nodes("F2").nodeParams.nodeId, maxAttempts = 3, routeParams = integrationTestRouteParams)
     val paymentSender = TestProbe()
@@ -1098,8 +1099,8 @@ class IntegrationSpec extends TestKitBaseClass with BitcoindService with AnyFunS
     // we use this to control when to fulfill htlcs
     val htlcReceiver = TestProbe()
     nodes("F3").paymentHandler ! new ForwardHandler(htlcReceiver.ref)
-    val preimage: ByteVector = randomBytes32
-    val paymentHash = Crypto.sha256(preimage)
+    val preimage = randomBytes32
+    val paymentHash = new ByteVector32(Crypto.sha256(preimage))
     // A sends a payment to F
     val paymentReq = SendPaymentRequest(100000000 msat, paymentHash, nodes("F3").nodeParams.nodeId, maxAttempts = 3, routeParams = integrationTestRouteParams)
     val paymentSender = TestProbe()
@@ -1156,8 +1157,8 @@ class IntegrationSpec extends TestKitBaseClass with BitcoindService with AnyFunS
     // we use this to control when to fulfill htlcs
     val htlcReceiver = TestProbe()
     nodes("F4").paymentHandler ! new ForwardHandler(htlcReceiver.ref)
-    val preimage: ByteVector = randomBytes32
-    val paymentHash = Crypto.sha256(preimage)
+    val preimage = randomBytes32
+    val paymentHash = new ByteVector32(Crypto.sha256(preimage))
     // A sends a payment to F
     val paymentReq = SendPaymentRequest(100000000 msat, paymentHash, nodes("F4").nodeParams.nodeId, maxAttempts = 3, routeParams = integrationTestRouteParams)
     val paymentSender = TestProbe()
@@ -1347,7 +1348,7 @@ class IntegrationSpec extends TestKitBaseClass with BitcoindService with AnyFunS
     generateBlocks(bitcoincli, 1, Some(address))
     logger.info(s"simulated ${channels.size} channels")
 
-    val remoteNodeId = PrivateKey(ByteVector32(ByteVector.fill(32)(1))).publicKey
+    val remoteNodeId = new PrivateKey(Hex.decode("01" * 32)).publicKey
 
     // then we make the announcements
     val announcements = channels.map(c => AnnouncementsBatchValidationSpec.makeChannelAnnouncement(c))

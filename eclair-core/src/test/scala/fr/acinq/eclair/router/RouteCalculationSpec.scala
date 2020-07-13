@@ -16,8 +16,8 @@
 
 package fr.acinq.eclair.router
 
-import fr.acinq.bitcoin.Crypto.PublicKey
-import fr.acinq.bitcoin.{Block, ByteVector32, ByteVector64, Satoshi}
+import fr.acinq.bitcoin.PublicKey
+import fr.acinq.bitcoin.{Block, Btc, ByteVector32, ByteVector64, Satoshi}
 import fr.acinq.eclair.payment.PaymentRequest.ExtraHop
 import fr.acinq.eclair.router.Graph.GraphStructure.DirectedGraph.graphEdgeToHop
 import fr.acinq.eclair.router.Graph.GraphStructure.{DirectedGraph, GraphEdge}
@@ -33,6 +33,7 @@ import scodec.bits._
 
 import scala.collection.immutable.SortedMap
 import scala.util.{Failure, Random, Success}
+import fr.acinq.eclair.KotlinUtils._
 
 /**
  * Created by PM on 31/05/2016.
@@ -79,12 +80,12 @@ class RouteCalculationSpec extends AnyFunSuite with ParallelTestExecution {
 
   test("calculate the shortest path (correct fees)") {
     val (a, b, c, d, e, f) = (
-      PublicKey(hex"02999fa724ec3c244e4da52b4a91ad421dc96c9a810587849cd4b2469313519c73"), // a: source
-      PublicKey(hex"03f1cb1af20fe9ccda3ea128e27d7c39ee27375c8480f11a87c17197e97541ca6a"),
-      PublicKey(hex"0358e32d245ff5f5a3eb14c78c6f69c67cea7846bdf9aeeb7199e8f6fbb0306484"),
-      PublicKey(hex"029e059b6780f155f38e83601969919aae631ddf6faed58fe860c72225eb327d7c"), // d: target
-      PublicKey(hex"03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f"),
-      PublicKey(hex"020c65be6f9252e85ae2fe9a46eed892cb89565e2157730e78311b1621a0db4b22")
+      PublicKey.fromHex("02999fa724ec3c244e4da52b4a91ad421dc96c9a810587849cd4b2469313519c73"), // a: source
+      PublicKey.fromHex("03f1cb1af20fe9ccda3ea128e27d7c39ee27375c8480f11a87c17197e97541ca6a"),
+      PublicKey.fromHex("0358e32d245ff5f5a3eb14c78c6f69c67cea7846bdf9aeeb7199e8f6fbb0306484"),
+      PublicKey.fromHex("029e059b6780f155f38e83601969919aae631ddf6faed58fe860c72225eb327d7c"), // d: target
+      PublicKey.fromHex("03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f"),
+      PublicKey.fromHex("020c65be6f9252e85ae2fe9a46eed892cb89565e2157730e78311b1621a0db4b22")
     )
 
     // note: we don't actually use floating point numbers
@@ -163,10 +164,10 @@ class RouteCalculationSpec extends AnyFunSuite with ParallelTestExecution {
 
   test("calculate the shortest path (hardcoded nodes)") {
     val (f, g, h, i) = (
-      PublicKey(hex"02999fa724ec3c244e4da52b4a91ad421dc96c9a810587849cd4b2469313519c73"), // source
-      PublicKey(hex"03f1cb1af20fe9ccda3ea128e27d7c39ee27375c8480f11a87c17197e97541ca6a"),
-      PublicKey(hex"0358e32d245ff5f5a3eb14c78c6f69c67cea7846bdf9aeeb7199e8f6fbb0306484"),
-      PublicKey(hex"029e059b6780f155f38e83601969919aae631ddf6faed58fe860c72225eb327d7c") // target
+      PublicKey.fromHex("02999fa724ec3c244e4da52b4a91ad421dc96c9a810587849cd4b2469313519c73"), // source
+      PublicKey.fromHex("03f1cb1af20fe9ccda3ea128e27d7c39ee27375c8480f11a87c17197e97541ca6a"),
+      PublicKey.fromHex("0358e32d245ff5f5a3eb14c78c6f69c67cea7846bdf9aeeb7199e8f6fbb0306484"),
+      PublicKey.fromHex("029e059b6780f155f38e83601969919aae631ddf6faed58fe860c72225eb327d7c") // target
     )
 
     val graph = DirectedGraph(List(
@@ -182,10 +183,10 @@ class RouteCalculationSpec extends AnyFunSuite with ParallelTestExecution {
 
   test("calculate the shortest path (select direct channel)") {
     val (f, g, h, i) = (
-      PublicKey(hex"02999fa724ec3c244e4da52b4a91ad421dc96c9a810587849cd4b2469313519c73"), // source
-      PublicKey(hex"03f1cb1af20fe9ccda3ea128e27d7c39ee27375c8480f11a87c17197e97541ca6a"),
-      PublicKey(hex"0358e32d245ff5f5a3eb14c78c6f69c67cea7846bdf9aeeb7199e8f6fbb0306484"),
-      PublicKey(hex"029e059b6780f155f38e83601969919aae631ddf6faed58fe860c72225eb327d7c") // target
+      PublicKey.fromHex("02999fa724ec3c244e4da52b4a91ad421dc96c9a810587849cd4b2469313519c73"), // source
+      PublicKey.fromHex("03f1cb1af20fe9ccda3ea128e27d7c39ee27375c8480f11a87c17197e97541ca6a"),
+      PublicKey.fromHex("0358e32d245ff5f5a3eb14c78c6f69c67cea7846bdf9aeeb7199e8f6fbb0306484"),
+      PublicKey.fromHex("029e059b6780f155f38e83601969919aae631ddf6faed58fe860c72225eb327d7c") // target
     )
 
     val graph = DirectedGraph(List(
@@ -202,10 +203,10 @@ class RouteCalculationSpec extends AnyFunSuite with ParallelTestExecution {
 
   test("find a route using channels with htlMaximumMsat close to the payment amount") {
     val (f, g, h, i) = (
-      PublicKey(hex"02999fa724ec3c244e4da52b4a91ad421dc96c9a810587849cd4b2469313519c73"), // F source
-      PublicKey(hex"03f1cb1af20fe9ccda3ea128e27d7c39ee27375c8480f11a87c17197e97541ca6a"), // G
-      PublicKey(hex"0358e32d245ff5f5a3eb14c78c6f69c67cea7846bdf9aeeb7199e8f6fbb0306484"), // H
-      PublicKey(hex"029e059b6780f155f38e83601969919aae631ddf6faed58fe860c72225eb327d7c") // I target
+      PublicKey.fromHex("02999fa724ec3c244e4da52b4a91ad421dc96c9a810587849cd4b2469313519c73"), // F source
+      PublicKey.fromHex("03f1cb1af20fe9ccda3ea128e27d7c39ee27375c8480f11a87c17197e97541ca6a"), // G
+      PublicKey.fromHex("0358e32d245ff5f5a3eb14c78c6f69c67cea7846bdf9aeeb7199e8f6fbb0306484"), // H
+      PublicKey.fromHex("029e059b6780f155f38e83601969919aae631ddf6faed58fe860c72225eb327d7c") // I target
     )
 
     val graph = DirectedGraph(List(
@@ -221,10 +222,10 @@ class RouteCalculationSpec extends AnyFunSuite with ParallelTestExecution {
 
   test("find a route using channels with htlMinimumMsat close to the payment amount") {
     val (f, g, h, i) = (
-      PublicKey(hex"02999fa724ec3c244e4da52b4a91ad421dc96c9a810587849cd4b2469313519c73"), // F source
-      PublicKey(hex"03f1cb1af20fe9ccda3ea128e27d7c39ee27375c8480f11a87c17197e97541ca6a"), // G
-      PublicKey(hex"0358e32d245ff5f5a3eb14c78c6f69c67cea7846bdf9aeeb7199e8f6fbb0306484"), // H
-      PublicKey(hex"029e059b6780f155f38e83601969919aae631ddf6faed58fe860c72225eb327d7c") // I target
+      PublicKey.fromHex("02999fa724ec3c244e4da52b4a91ad421dc96c9a810587849cd4b2469313519c73"), // F source
+      PublicKey.fromHex("03f1cb1af20fe9ccda3ea128e27d7c39ee27375c8480f11a87c17197e97541ca6a"), // G
+      PublicKey.fromHex("0358e32d245ff5f5a3eb14c78c6f69c67cea7846bdf9aeeb7199e8f6fbb0306484"), // H
+      PublicKey.fromHex("029e059b6780f155f38e83601969919aae631ddf6faed58fe860c72225eb327d7c") // I target
     )
 
     val graph = DirectedGraph(List(
@@ -240,10 +241,10 @@ class RouteCalculationSpec extends AnyFunSuite with ParallelTestExecution {
 
   test("if there are multiple channels between the same node, select the cheapest") {
     val (f, g, h, i) = (
-      PublicKey(hex"02999fa724ec3c244e4da52b4a91ad421dc96c9a810587849cd4b2469313519c73"), // F source
-      PublicKey(hex"03f1cb1af20fe9ccda3ea128e27d7c39ee27375c8480f11a87c17197e97541ca6a"), // G
-      PublicKey(hex"0358e32d245ff5f5a3eb14c78c6f69c67cea7846bdf9aeeb7199e8f6fbb0306484"), // H
-      PublicKey(hex"029e059b6780f155f38e83601969919aae631ddf6faed58fe860c72225eb327d7c") // I target
+      PublicKey.fromHex("02999fa724ec3c244e4da52b4a91ad421dc96c9a810587849cd4b2469313519c73"), // F source
+      PublicKey.fromHex("03f1cb1af20fe9ccda3ea128e27d7c39ee27375c8480f11a87c17197e97541ca6a"), // G
+      PublicKey.fromHex("0358e32d245ff5f5a3eb14c78c6f69c67cea7846bdf9aeeb7199e8f6fbb0306484"), // H
+      PublicKey.fromHex("029e059b6780f155f38e83601969919aae631ddf6faed58fe860c72225eb327d7c") // I target
     )
 
     val graph = DirectedGraph(List(
@@ -259,10 +260,10 @@ class RouteCalculationSpec extends AnyFunSuite with ParallelTestExecution {
 
   test("if there are multiple channels between the same node, select one that has enough balance") {
     val (f, g, h, i) = (
-      PublicKey(hex"02999fa724ec3c244e4da52b4a91ad421dc96c9a810587849cd4b2469313519c73"), // F source
-      PublicKey(hex"03f1cb1af20fe9ccda3ea128e27d7c39ee27375c8480f11a87c17197e97541ca6a"), // G
-      PublicKey(hex"0358e32d245ff5f5a3eb14c78c6f69c67cea7846bdf9aeeb7199e8f6fbb0306484"), // H
-      PublicKey(hex"029e059b6780f155f38e83601969919aae631ddf6faed58fe860c72225eb327d7c") // I target
+      PublicKey.fromHex("02999fa724ec3c244e4da52b4a91ad421dc96c9a810587849cd4b2469313519c73"), // F source
+      PublicKey.fromHex("03f1cb1af20fe9ccda3ea128e27d7c39ee27375c8480f11a87c17197e97541ca6a"), // G
+      PublicKey.fromHex("0358e32d245ff5f5a3eb14c78c6f69c67cea7846bdf9aeeb7199e8f6fbb0306484"), // H
+      PublicKey.fromHex("029e059b6780f155f38e83601969919aae631ddf6faed58fe860c72225eb327d7c") // I target
     )
 
     val graph = DirectedGraph(List(
@@ -564,7 +565,7 @@ class RouteCalculationSpec extends AnyFunSuite with ParallelTestExecution {
     val publicChannels = channels.map { case (shortChannelId, announcement) =>
       val update = edges.find(_.desc.shortChannelId == shortChannelId).get.update
       val (update_1_opt, update_2_opt) = if (Announcements.isNode1(update.channelFlags)) (Some(update), None) else (None, Some(update))
-      val pc = PublicChannel(announcement, ByteVector32.Zeroes, Satoshi(1000), update_1_opt, update_2_opt, None)
+      val pc = PublicChannel(announcement, ByteVector32.Zeroes, new Satoshi(1000), update_1_opt, update_2_opt, None)
       (shortChannelId, pc)
     }
 
@@ -676,12 +677,12 @@ class RouteCalculationSpec extends AnyFunSuite with ParallelTestExecution {
   // +---+                       +---+
   test("find the k-shortest paths in a graph, k=4") {
     val (a, b, c, d, e, f) = (
-      PublicKey(hex"02999fa724ec3c244e4da52b4a91ad421dc96c9a810587849cd4b2469313519c73"),
-      PublicKey(hex"03f1cb1af20fe9ccda3ea128e27d7c39ee27375c8480f11a87c17197e97541ca6a"),
-      PublicKey(hex"0358e32d245ff5f5a3eb14c78c6f69c67cea7846bdf9aeeb7199e8f6fbb0306484"),
-      PublicKey(hex"029e059b6780f155f38e83601969919aae631ddf6faed58fe860c72225eb327d7c"),
-      PublicKey(hex"02f38f4e37142cc05df44683a83e22dea608cf4691492829ff4cf99888c5ec2d3a"),
-      PublicKey(hex"03fc5b91ce2d857f146fd9b986363374ffe04dc143d8bcd6d7664c8873c463cdfc")
+      PublicKey.fromHex("02999fa724ec3c244e4da52b4a91ad421dc96c9a810587849cd4b2469313519c73"), //a
+      PublicKey.fromHex("03f1cb1af20fe9ccda3ea128e27d7c39ee27375c8480f11a87c17197e97541ca6a"), //b
+      PublicKey.fromHex("0358e32d245ff5f5a3eb14c78c6f69c67cea7846bdf9aeeb7199e8f6fbb0306484"), //c
+      PublicKey.fromHex("029e059b6780f155f38e83601969919aae631ddf6faed58fe860c72225eb327d7c"), //d
+      PublicKey.fromHex("02f38f4e37142cc05df44683a83e22dea608cf4691492829ff4cf99888c5ec2d3a"), //e
+      PublicKey.fromHex("03fc5b91ce2d857f146fd9b986363374ffe04dc143d8bcd6d7664c8873c463cdfc") //f
     )
 
     val g1 = DirectedGraph(Seq(
@@ -712,12 +713,12 @@ class RouteCalculationSpec extends AnyFunSuite with ParallelTestExecution {
 
   test("find the k shortest path (wikipedia example)") {
     val (c, d, e, f, g, h) = (
-      PublicKey(hex"02999fa724ec3c244e4da52b4a91ad421dc96c9a810587849cd4b2469313519c73"),
-      PublicKey(hex"03f1cb1af20fe9ccda3ea128e27d7c39ee27375c8480f11a87c17197e97541ca6a"),
-      PublicKey(hex"0358e32d245ff5f5a3eb14c78c6f69c67cea7846bdf9aeeb7199e8f6fbb0306484"),
-      PublicKey(hex"029e059b6780f155f38e83601969919aae631ddf6faed58fe860c72225eb327d7c"),
-      PublicKey(hex"02f38f4e37142cc05df44683a83e22dea608cf4691492829ff4cf99888c5ec2d3a"),
-      PublicKey(hex"03fc5b91ce2d857f146fd9b986363374ffe04dc143d8bcd6d7664c8873c463cdfc")
+      PublicKey.fromHex("02999fa724ec3c244e4da52b4a91ad421dc96c9a810587849cd4b2469313519c73"), //c
+      PublicKey.fromHex("03f1cb1af20fe9ccda3ea128e27d7c39ee27375c8480f11a87c17197e97541ca6a"), //d
+      PublicKey.fromHex("0358e32d245ff5f5a3eb14c78c6f69c67cea7846bdf9aeeb7199e8f6fbb0306484"), //e
+      PublicKey.fromHex("029e059b6780f155f38e83601969919aae631ddf6faed58fe860c72225eb327d7c"), //f
+      PublicKey.fromHex("02f38f4e37142cc05df44683a83e22dea608cf4691492829ff4cf99888c5ec2d3a"), //g
+      PublicKey.fromHex("03fc5b91ce2d857f146fd9b986363374ffe04dc143d8bcd6d7664c8873c463cdfc") //h
     )
 
     val graph = DirectedGraph(Seq(
@@ -899,7 +900,7 @@ class RouteCalculationSpec extends AnyFunSuite with ParallelTestExecution {
     // then if the cost function is not monotonic the path-finding breaks because the result path contains a loop.
     val updates = SortedMap(
       ShortChannelId("565643x1216x0") -> PublicChannel(
-        ann = makeChannel(ShortChannelId("565643x1216x0").toLong, PublicKey(hex"03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f"), PublicKey(hex"024655b768ef40951b20053a5c4b951606d4d86085d51238f2c67c7dec29c792ca")),
+        ann = makeChannel(ShortChannelId("565643x1216x0").toLong, PublicKey.fromHex("03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f"), PublicKey.fromHex("024655b768ef40951b20053a5c4b951606d4d86085d51238f2c67c7dec29c792ca")),
         fundingTxid = ByteVector32.Zeroes,
         capacity = DEFAULT_CAPACITY,
         update_1_opt = Some(ChannelUpdate(ByteVector64.Zeroes, ByteVector32.Zeroes, ShortChannelId("565643x1216x0"), 0, 1.toByte, 0.toByte, CltvExpiryDelta(14), htlcMinimumMsat = 1 msat, feeBaseMsat = 1000 msat, 10, Some(4294967295L msat))),
@@ -907,7 +908,7 @@ class RouteCalculationSpec extends AnyFunSuite with ParallelTestExecution {
         meta_opt = None
       ),
       ShortChannelId("542280x2156x0") -> PublicChannel(
-        ann = makeChannel(ShortChannelId("542280x2156x0").toLong, PublicKey(hex"03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f"), PublicKey(hex"03cb7983dc247f9f81a0fa2dfa3ce1c255365f7279c8dd143e086ca333df10e278")),
+        ann = makeChannel(ShortChannelId("542280x2156x0").toLong, PublicKey.fromHex("03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f"), PublicKey.fromHex("03cb7983dc247f9f81a0fa2dfa3ce1c255365f7279c8dd143e086ca333df10e278")),
         fundingTxid = ByteVector32.Zeroes,
         capacity = DEFAULT_CAPACITY,
         update_1_opt = Some(ChannelUpdate(ByteVector64.Zeroes, ByteVector32.Zeroes, ShortChannelId("542280x2156x0"), 0, 1.toByte, 0.toByte, CltvExpiryDelta(144), htlcMinimumMsat = 1000 msat, feeBaseMsat = 1000 msat, 100, Some(16777000000L msat))),
@@ -915,7 +916,7 @@ class RouteCalculationSpec extends AnyFunSuite with ParallelTestExecution {
         meta_opt = None
       ),
       ShortChannelId("565779x2711x0") -> PublicChannel(
-        ann = makeChannel(ShortChannelId("565779x2711x0").toLong, PublicKey(hex"036d65409c41ab7380a43448f257809e7496b52bf92057c09c4f300cbd61c50d96"), PublicKey(hex"03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f")),
+        ann = makeChannel(ShortChannelId("565779x2711x0").toLong, PublicKey.fromHex("036d65409c41ab7380a43448f257809e7496b52bf92057c09c4f300cbd61c50d96"), PublicKey.fromHex("03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f")),
         fundingTxid = ByteVector32.Zeroes,
         capacity = DEFAULT_CAPACITY,
         update_1_opt = Some(ChannelUpdate(ByteVector64.Zeroes, ByteVector32.Zeroes, ShortChannelId("565779x2711x0"), 0, 1.toByte, 0.toByte, CltvExpiryDelta(144), htlcMinimumMsat = 1 msat, feeBaseMsat = 1000 msat, 100, Some(230000000L msat))),
@@ -929,8 +930,8 @@ class RouteCalculationSpec extends AnyFunSuite with ParallelTestExecution {
       routeMaxCltv = CltvExpiryDelta(1008),
       ratios = Some(WeightRatios(cltvDeltaFactor = 0.15, ageFactor = 0.35, capacityFactor = 0.5)),
     )
-    val thisNode = PublicKey(hex"036d65409c41ab7380a43448f257809e7496b52bf92057c09c4f300cbd61c50d96")
-    val targetNode = PublicKey(hex"024655b768ef40951b20053a5c4b951606d4d86085d51238f2c67c7dec29c792ca")
+    val thisNode = PublicKey.fromHex("036d65409c41ab7380a43448f257809e7496b52bf92057c09c4f300cbd61c50d96")
+    val targetNode = PublicKey.fromHex("024655b768ef40951b20053a5c4b951606d4d86085d51238f2c67c7dec29c792ca")
     val amount = 351000 msat
 
     val Success(route :: Nil) = findRoute(g, thisNode, targetNode, amount, DEFAULT_MAX_FEE, 1, Set.empty, Set.empty, Set.empty, params, currentBlockHeight = 567634) // simulate mainnet block for heuristic

@@ -19,7 +19,7 @@ package fr.acinq.eclair.db.sqlite
 import java.sql.Connection
 
 import fr.acinq.bitcoin.Crypto
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.PublicKey
 import fr.acinq.eclair.db.Monitoring.Metrics.withMetrics
 import fr.acinq.eclair.db.PeersDb
 import fr.acinq.eclair.db.sqlite.SqliteUtils.{codecSequence, getVersion, using}
@@ -38,14 +38,14 @@ class SqlitePeersDb(sqlite: Connection) extends PeersDb {
     statement.executeUpdate("CREATE TABLE IF NOT EXISTS peers (node_id BLOB NOT NULL PRIMARY KEY, data BLOB NOT NULL)")
   }
 
-  override def addOrUpdatePeer(nodeId: Crypto.PublicKey, nodeaddress: NodeAddress): Unit = withMetrics("peers/add-or-update") {
+  override def addOrUpdatePeer(nodeId: PublicKey, nodeaddress: NodeAddress): Unit = withMetrics("peers/add-or-update") {
     val data = CommonCodecs.nodeaddress.encode(nodeaddress).require.toByteArray
     using(sqlite.prepareStatement("UPDATE peers SET data=? WHERE node_id=?")) { update =>
       update.setBytes(1, data)
-      update.setBytes(2, nodeId.value.toArray)
+      update.setBytes(2, nodeId.value.toByteArray)
       if (update.executeUpdate() == 0) {
         using(sqlite.prepareStatement("INSERT INTO peers VALUES (?, ?)")) { statement =>
-          statement.setBytes(1, nodeId.value.toArray)
+          statement.setBytes(1, nodeId.value.toByteArray)
           statement.setBytes(2, data)
           statement.executeUpdate()
         }
@@ -53,16 +53,16 @@ class SqlitePeersDb(sqlite: Connection) extends PeersDb {
     }
   }
 
-  override def removePeer(nodeId: Crypto.PublicKey): Unit = withMetrics("peers/remove") {
+  override def removePeer(nodeId: PublicKey): Unit = withMetrics("peers/remove") {
     using(sqlite.prepareStatement("DELETE FROM peers WHERE node_id=?")) { statement =>
-      statement.setBytes(1, nodeId.value.toArray)
+      statement.setBytes(1, nodeId.value.toByteArray)
       statement.executeUpdate()
     }
   }
 
   override def getPeer(nodeId: PublicKey): Option[NodeAddress] = withMetrics("peers/get") {
     using(sqlite.prepareStatement("SELECT data FROM peers WHERE node_id=?")) { statement =>
-      statement.setBytes(1, nodeId.value.toArray)
+      statement.setBytes(1, nodeId.value.toByteArray)
       val rs = statement.executeQuery()
       codecSequence(rs, CommonCodecs.nodeaddress).headOption
     }
@@ -73,7 +73,7 @@ class SqlitePeersDb(sqlite: Connection) extends PeersDb {
       val rs = statement.executeQuery("SELECT node_id, data FROM peers")
       var m: Map[PublicKey, NodeAddress] = Map()
       while (rs.next()) {
-        val nodeid = PublicKey(rs.getByteVector("node_id"))
+        val nodeid = new PublicKey(rs.getBytes("node_id"))
         val nodeaddress = CommonCodecs.nodeaddress.decode(BitVector(rs.getBytes("data"))).require.value
         m += (nodeid -> nodeaddress)
       }

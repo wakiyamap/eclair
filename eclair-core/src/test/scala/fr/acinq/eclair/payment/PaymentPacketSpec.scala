@@ -18,9 +18,9 @@ package fr.acinq.eclair.payment
 
 import java.util.UUID
 
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.PublicKey
 import fr.acinq.bitcoin.DeterministicWallet.ExtendedPrivateKey
-import fr.acinq.bitcoin.{Block, ByteVector32, Crypto, DeterministicWallet}
+import fr.acinq.bitcoin.{Block, ByteVector => ByteVectorAcinq, ByteVector32, Crypto, DeterministicWallet}
 import fr.acinq.eclair.FeatureSupport.Optional
 import fr.acinq.eclair.Features._
 import fr.acinq.eclair.channel.{Channel, ChannelVersion, Commitments, Upstream}
@@ -45,6 +45,8 @@ import scodec.bits.{ByteVector, HexStringSyntax}
 class PaymentPacketSpec extends AnyFunSuite with BeforeAndAfterAll {
 
   import PaymentPacketSpec._
+  implicit def bytevector2bytevarray(input: ByteVector) : Array[Byte] = input.toArray
+  implicit def bytevarray2bytevector32(input: Array[Byte]) : ByteVector32 = new ByteVector32(input)
 
   implicit val log: akka.event.LoggingAdapter = akka.event.NoLogging
 
@@ -287,7 +289,7 @@ class PaymentPacketSpec extends AnyFunSuite with BeforeAndAfterAll {
   }
 
   test("fail to decrypt when payment hash doesn't match associated data") {
-    val (firstAmount, firstExpiry, onion) = buildPacket(Sphinx.PaymentPacket)(paymentHash.reverse, hops, FinalLegacyPayload(finalAmount, finalExpiry))
+    val (firstAmount, firstExpiry, onion) = buildPacket(Sphinx.PaymentPacket)(paymentHash.reversed(), hops, FinalLegacyPayload(finalAmount, finalExpiry))
     val add = UpdateAddHtlc(randomBytes32, 1, firstAmount, paymentHash, firstExpiry, onion.packet)
     val Left(failure) = decrypt(add, priv_b.privateKey, variableLengthOnionFeature)
     assert(failure.isInstanceOf[InvalidOnionHmac])
@@ -404,7 +406,7 @@ object PaymentPacketSpec {
 
   val (priv_a, priv_b, priv_c, priv_d, priv_e) = (TestConstants.Alice.keyManager.nodeKey, TestConstants.Bob.keyManager.nodeKey, randomExtendedPrivateKey, randomExtendedPrivateKey, randomExtendedPrivateKey)
   val (a, b, c, d, e) = (priv_a.publicKey, priv_b.publicKey, priv_c.publicKey, priv_d.publicKey, priv_e.publicKey)
-  val sig = Crypto.sign(Crypto.sha256(ByteVector.empty), priv_a.privateKey)
+  val sig = Crypto.sign(Crypto.sha256(ByteVectorAcinq.empty), priv_a.privateKey)
   val defaultChannelUpdate = ChannelUpdate(sig, Block.RegtestGenesisBlock.hash, ShortChannelId(0), 0, 1, 0, CltvExpiryDelta(0), 42000 msat, 0 msat, 0, Some(500000000 msat))
   val channelUpdate_ab = defaultChannelUpdate.copy(shortChannelId = ShortChannelId(1), cltvExpiryDelta = CltvExpiryDelta(4), feeBaseMsat = 642000 msat, feeProportionalMillionths = 7)
   val channelUpdate_bc = defaultChannelUpdate.copy(shortChannelId = ShortChannelId(2), cltvExpiryDelta = CltvExpiryDelta(5), feeBaseMsat = 153000 msat, feeProportionalMillionths = 4)
@@ -423,7 +425,7 @@ object PaymentPacketSpec {
   val currentBlockCount = 400000
   val finalExpiry = CltvExpiry(currentBlockCount) + Channel.MIN_CLTV_EXPIRY_DELTA
   val paymentPreimage = randomBytes32
-  val paymentHash = Crypto.sha256(paymentPreimage)
+  val paymentHash = new ByteVector32(Crypto.sha256(paymentPreimage))
   val paymentSecret = randomBytes32
 
   val expiry_de = finalExpiry

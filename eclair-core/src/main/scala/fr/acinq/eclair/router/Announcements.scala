@@ -16,8 +16,9 @@
 
 package fr.acinq.eclair.router
 
-import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey, sha256, verifySignature}
-import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, LexicographicalOrdering}
+import fr.acinq.bitcoin.{Crypto, PrivateKey, PublicKey}
+import Crypto.{sha256, verifySignature}
+import fr.acinq.bitcoin.{ByteVector32, ByteVector64, LexicographicalOrdering}
 import fr.acinq.eclair.wire._
 import fr.acinq.eclair.{CltvExpiryDelta, Features, MilliSatoshi, ShortChannelId, serializationResult}
 import scodec.bits.{BitVector, ByteVector}
@@ -30,6 +31,8 @@ import scala.concurrent.duration._
  * Created by PM on 03/02/2017.
  */
 object Announcements {
+  implicit def bytearray2bytevector(input: Array[Byte]): ByteVector = ByteVector.view(input)
+  implicit def bytevector2bytearray(input: ByteVector): Array[Byte] = input.toArray
 
   def channelAnnouncementWitnessEncode(chainHash: ByteVector32, shortChannelId: ShortChannelId, nodeId1: PublicKey, nodeId2: PublicKey, bitcoinKey1: PublicKey, bitcoinKey2: PublicKey, features: Features, unknownFields: ByteVector): ByteVector =
     sha256(sha256(serializationResult(LightningMessageCodecs.channelAnnouncementWitnessCodec.encode(features :: chainHash :: shortChannelId :: nodeId1 :: nodeId2 :: bitcoinKey1 :: bitcoinKey2 :: unknownFields :: HNil))))
@@ -96,7 +99,7 @@ object Announcements {
    *
    * @return true if localNodeId is node1
    */
-  def isNode1(localNodeId: PublicKey, remoteNodeId: PublicKey) = LexicographicalOrdering.isLessThan(localNodeId.value, remoteNodeId.value)
+  def isNode1(localNodeId: PublicKey, remoteNodeId: PublicKey) = LexicographicalOrdering.isLessThan(localNodeId, remoteNodeId)
 
   /**
    * BOLT 7:

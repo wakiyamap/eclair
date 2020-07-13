@@ -20,8 +20,8 @@ import akka.actor.Status.Failure
 import akka.pattern.pipe
 import akka.testkit.TestProbe
 import com.typesafe.config.ConfigFactory
-import fr.acinq.bitcoin.Crypto.PublicKey
-import fr.acinq.bitcoin.{Block, Btc, ByteVector32, MilliBtc, OutPoint, Satoshi, Script, Transaction, TxIn, TxOut}
+import fr.acinq.bitcoin.PublicKey
+import fr.acinq.bitcoin.{Block, Btc, ByteVector32, Crypto, MilliBtc, OP_CHECKSIG, OP_DUP, OP_EQUALVERIFY, OP_HASH160, OP_PUSHDATA, OutPoint, Satoshi, Script, Transaction, TxIn, TxOut}
 import fr.acinq.eclair.blockchain._
 import fr.acinq.eclair.blockchain.bitcoind.BitcoinCoreWallet.{FundTransactionResponse, SignTransactionResponse, WalletTransaction}
 import fr.acinq.eclair.blockchain.bitcoind.BitcoindService.BitcoinReq
@@ -39,6 +39,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.util.{Random, Try}
+import fr.acinq.eclair.KotlinUtils._
 
 
 class BitcoinCoreWalletSpec extends TestKitBaseClass with BitcoindService with AnyFunSuiteLike with BeforeAndAfterAll with Logging {
@@ -76,7 +77,7 @@ class BitcoinCoreWalletSpec extends TestKitBaseClass with BitcoindService with A
     val txids = locks.map { item =>
       val JString(txid) = item \ "txid"
       val JInt(vout) = item \ "vout"
-      OutPoint(ByteVector32.fromValidHex(txid).reverse, vout.toInt)
+      new OutPoint(ByteVector32.fromValidHex(txid).reversed(), vout.toInt)
     }
     txids.toSet
   }
@@ -96,10 +97,9 @@ class BitcoinCoreWalletSpec extends TestKitBaseClass with BitcoindService with A
     val MakeFundingTxResponse(fundingTx, outputIndex, _) = sender.expectMsgType[MakeFundingTxResponse]
 
     // spend the first 2 inputs
-    val tx1 = fundingTx.copy(
-      txIn = fundingTx.txIn.take(2),
-      txOut = fundingTx.txOut.updated(outputIndex, fundingTx.txOut(outputIndex).copy(amount = Btc(50)))
-    )
+    val tx1 = fundingTx
+      .updateInputs(fundingTx.txIn.take(2))
+      .updateOutputs(fundingTx.txOut.updated(outputIndex, fundingTx.txOut(outputIndex).updateAmount(Btc(50).toSatoshi)))
     wallet.signTransaction(tx1).pipeTo(sender.ref)
     val SignTransactionResponse(tx2, true) = sender.expectMsgType[SignTransactionResponse]
 
@@ -153,7 +153,7 @@ class BitcoinCoreWalletSpec extends TestKitBaseClass with BitcoindService with A
       assert(getLocks(sender) == fundingTx.txIn.map(_.outPoint).toSet)
 
       // unlock the first 2 outpoints
-      val tx1 = fundingTx.copy(txIn = fundingTx.txIn.take(2))
+      val tx1 = fundingTx.updateInputs(fundingTx.txIn.take(2))
       wallet.rollback(tx1).pipeTo(sender.ref)
       assert(sender.expectMsgType[Boolean])
       assert(getLocks(sender) == fundingTx.txIn.drop(2).map(_.outPoint).toSet)
@@ -186,11 +186,11 @@ class BitcoinCoreWalletSpec extends TestKitBaseClass with BitcoindService with A
       val sender = TestProbe()
       val wallet = new BitcoinCoreWallet(bitcoinClient)
       wallet.getBalance.pipeTo(sender.ref)
-      assert(sender.expectMsgType[OnChainBalance] === OnChainBalance(Satoshi(satoshi), Satoshi(satoshi)))
+      assert(sender.expectMsgType[OnChainBalance] === OnChainBalance(new Satoshi(satoshi), new Satoshi(satoshi)))
 
       wallet.fundTransaction(hexIn, lockUnspents = false, 250).pipeTo(sender.ref)
       val FundTransactionResponse(_, _, fee) = sender.expectMsgType[FundTransactionResponse]
-      assert(fee == Satoshi(satoshi))
+      assert(fee == new Satoshi(satoshi))
     }
   }
 
@@ -211,14 +211,14 @@ class BitcoinCoreWalletSpec extends TestKitBaseClass with BitcoindService with A
       ByteVector32.fromValidHex("02" * 32),
       ByteVector32.fromValidHex("03" * 32)
     )
-    val unsignedTx = Transaction(version = 2,
-      txIn = Seq(
-        TxIn(OutPoint(unknownTxids(0), 0), signatureScript = Nil, sequence = TxIn.SEQUENCE_FINAL),
-        TxIn(OutPoint(unknownTxids(1), 0), signatureScript = Nil, sequence = TxIn.SEQUENCE_FINAL),
-        TxIn(OutPoint(unknownTxids(2), 0), signatureScript = Nil, sequence = TxIn.SEQUENCE_FINAL)
+    val unsignedTx = new Transaction(2,
+      Seq(
+        new TxIn(new OutPoint(unknownTxids(0), 0), TxIn.SEQUENCE_FINAL),
+        new TxIn(new OutPoint(unknownTxids(1), 0), TxIn.SEQUENCE_FINAL),
+        new TxIn(new OutPoint(unknownTxids(2), 0), TxIn.SEQUENCE_FINAL)
       ),
-      txOut = TxOut(1000000 sat, addressToPublicKeyScript(address, Block.RegtestGenesisBlock.hash)) :: Nil,
-      lockTime = 0)
+      new TxOut(1000000 sat, addressToPublicKeyScript(address, Block.RegtestGenesisBlock.hash)) :: Nil,
+      0)
 
     // signing it should fail, and the error message should contain the txids of the UTXOs that could not be used
     wallet.signTransaction(unsignedTx).pipeTo(sender.ref)
@@ -395,7 +395,7 @@ class BitcoinCoreWalletSpec extends TestKitBaseClass with BitcoindService with A
 
     wallet.getReceivePubkey(receiveAddress = Some(address)).pipeTo(sender.ref)
     val receiveKey = sender.expectMsgType[PublicKey]
-    assert(addressToPublicKeyScript(address, Block.RegtestGenesisBlock.hash) === Script.pay2wpkh(receiveKey))
+    assert(addressToPublicKeyScript(address, Block.RegtestGenesisBlock.hash).asJava === Script.pay2wpkh(receiveKey))
   }
 
   test("send and list transactions") {
@@ -420,19 +420,19 @@ class BitcoinCoreWalletSpec extends TestKitBaseClass with BitcoindService with A
     wallet.listTransactions(25, 0).pipeTo(sender.ref)
     val Some(tx1) = sender.expectMsgType[List[WalletTransaction]].collectFirst { case tx if tx.txid == txid => tx }
     assert(tx1.address === address)
-    assert(tx1.amount === -amount)
+    assert(tx1.amount === amount.unaryMinus())
     assert(tx1.fees < 0.sat)
     assert(tx1.confirmations === 0)
 
     wallet.getBalance.pipeTo(sender.ref)
     // NB: we use + because these amounts are already negative
-    sender.expectMsg(initialBalance.copy(confirmed = initialBalance.confirmed + tx1.amount + tx1.fees))
+    sender.expectMsg(initialBalance.copy(confirmed = initialBalance.confirmed plus tx1.amount plus tx1.fees))
 
     generateBlocks(bitcoincli, 1)
     wallet.listTransactions(25, 0).pipeTo(sender.ref)
     val Some(tx2) = sender.expectMsgType[List[WalletTransaction]].collectFirst { case tx if tx.txid == txid => tx }
     assert(tx2.address === address)
-    assert(tx2.amount === -amount)
+    assert(tx2.amount === amount.unaryMinus())
     assert(tx2.fees < 0.sat)
     assert(tx2.confirmations === 1)
   }

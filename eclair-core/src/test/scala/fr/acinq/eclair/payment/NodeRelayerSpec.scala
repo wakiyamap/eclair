@@ -20,7 +20,7 @@ import java.util.UUID
 
 import akka.actor.ActorRef
 import akka.testkit.{TestActorRef, TestProbe}
-import fr.acinq.bitcoin.{Block, Crypto}
+import fr.acinq.bitcoin.{Block, ByteVector32, Crypto}
 import fr.acinq.eclair.Features._
 import fr.acinq.eclair.channel.{CMD_FAIL_HTLC, CMD_FULFILL_HTLC, Register, Upstream}
 import fr.acinq.eclair.crypto.Sphinx
@@ -35,7 +35,7 @@ import fr.acinq.eclair.wire._
 import fr.acinq.eclair.{CltvExpiry, CltvExpiryDelta, LongToBtcAmount, MilliSatoshi, NodeParams, ShortChannelId, TestConstants, TestKitBaseClass, nodeFee, randomBytes, randomBytes32, randomKey}
 import org.scalatest.Outcome
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
-import scodec.bits.HexStringSyntax
+import scodec.bits.{ByteVector, HexStringSyntax}
 
 import scala.collection.immutable.Queue
 import scala.concurrent.duration._
@@ -412,9 +412,10 @@ class NodeRelayerSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike {
 }
 
 object NodeRelayerSpec {
+  implicit def bytevarray2bytevector(input: Array[Byte]) : ByteVector = ByteVector.view(input)
 
   val paymentPreimage = randomBytes32
-  val paymentHash = Crypto.sha256(paymentPreimage)
+  val paymentHash = new ByteVector32(Crypto.sha256(paymentPreimage))
 
   // This is the result of decrypting the incoming trampoline onion packet.
   // It should be forwarded to the next trampoline node.

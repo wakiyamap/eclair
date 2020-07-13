@@ -36,6 +36,7 @@ import javafx.stage.Stage
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
+import KotlinUtils._
 
 /**
   * Created by DPA on 23/09/2016.

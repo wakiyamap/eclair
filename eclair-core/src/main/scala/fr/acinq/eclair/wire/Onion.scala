@@ -16,8 +16,8 @@
 
 package fr.acinq.eclair.wire
 
-import fr.acinq.bitcoin.ByteVector32
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.{ByteVector32, PublicKey}
+import fr.acinq.bitcoin.PublicKey
 import fr.acinq.eclair.crypto.Sphinx
 import fr.acinq.eclair.payment.PaymentRequest
 import fr.acinq.eclair.wire.CommonCodecs._
@@ -122,6 +122,11 @@ Notes:
 
 case class OnionRoutingPacket(version: Int, publicKey: ByteVector, payload: ByteVector, hmac: ByteVector32)
 
+object OnionRoutingPacket {
+  def apply(version: Int, publicKey: PublicKey, payload: ByteVector, hmac: ByteVector32) : OnionRoutingPacket = {
+    new OnionRoutingPacket(version, ByteVector.view(publicKey.value.toByteArray), payload, hmac)
+  }
+}
 /** Tlv types used inside onion messages. */
 sealed trait OnionTlv extends Tlv
 

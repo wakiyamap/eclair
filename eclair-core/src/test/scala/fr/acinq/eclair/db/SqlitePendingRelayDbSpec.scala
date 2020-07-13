@@ -16,13 +16,16 @@
 
 package fr.acinq.eclair.db
 
+import fr.acinq.bitcoin.ByteVector32
 import fr.acinq.eclair.channel.{CMD_FAIL_HTLC, CMD_FAIL_MALFORMED_HTLC, CMD_FULFILL_HTLC}
 import fr.acinq.eclair.wire.FailureMessageCodecs
 import fr.acinq.eclair.{TestConstants, randomBytes32}
 import org.scalatest.funsuite.AnyFunSuite
+import scodec.bits.ByteVector
 
 
 class SqlitePendingRelayDbSpec extends AnyFunSuite {
+  implicit def bytevector322bytevector(input: ByteVector32) : ByteVector = ByteVector.view(input.toByteArray)
 
   import TestConstants.forAllDbs
 

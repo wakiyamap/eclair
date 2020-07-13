@@ -23,6 +23,7 @@ import java.util
 import akka.actor.{Actor, ActorLogging, ActorRef, Props, Stash}
 import akka.io.Tcp.Connected
 import akka.util.ByteString
+import fr.acinq.bitcoin.ByteVector32
 import fr.acinq.eclair.tor.TorProtocolHandler.{Authentication, OnionServiceVersion}
 import fr.acinq.eclair.wire.{NodeAddress, Tor2, Tor3}
 import javax.crypto.Mac
@@ -198,6 +199,8 @@ object TorProtocolHandler {
             onionAdded: Option[Promise[NodeAddress]] = None
            ): Props =
     Props(new TorProtocolHandler(version, authentication, privateKeyPath, virtualPort, targetPorts, onionAdded))
+
+  implicit def byteVector322bytevector(input: ByteVector32): ByteVector = ByteVector.view(input.toByteArray)
 
   // those are defined in the spec
   private val ServerKey = ByteVector.view("Tor safe cookie authentication server-to-controller hash".getBytes())

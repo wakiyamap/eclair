@@ -20,8 +20,8 @@ import java.util.UUID
 
 import akka.actor.{Actor, ActorRef, DiagnosticActorLogging, PoisonPill, Props}
 import akka.event.Logging.MDC
-import fr.acinq.bitcoin.ByteVector32
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.PublicKey
+import fr.acinq.bitcoin.{ByteVector32, Crypto}
 import fr.acinq.eclair.channel.{CMD_FAIL_HTLC, CMD_FULFILL_HTLC, Upstream}
 import fr.acinq.eclair.db.PendingRelayDb
 import fr.acinq.eclair.payment.Monitoring.{Metrics, Tags}
@@ -50,6 +50,7 @@ import scala.collection.immutable.Queue
 class NodeRelayer(nodeParams: NodeParams, router: ActorRef, register: ActorRef) extends Actor with DiagnosticActorLogging {
 
   import NodeRelayer._
+  implicit def bytearray2bytevector32(input: Array[Byte]): ByteVector32 = new ByteVector32(input)
 
   override def receive: Receive = main(Map.empty, Map.empty)
 

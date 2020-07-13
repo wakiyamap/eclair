@@ -29,6 +29,9 @@ import fr.acinq.eclair.blockchain.bitcoind.ZmqWatcher._
 import fr.acinq.eclair.blockchain.bitcoind.rpc.ExtendedBitcoinClient
 import fr.acinq.eclair.blockchain.bitcoind.zmq.ZMQActor
 import fr.acinq.eclair.channel.{BITCOIN_FUNDING_DEPTHOK, BITCOIN_FUNDING_SPENT}
+import fr.acinq.bitcoin.{ByteVector32, OutPoint}
+import fr.acinq.eclair.blockchain.{Watch, WatchConfirmed, WatchSpent, WatchSpentBasic}
+import fr.acinq.eclair.channel.BITCOIN_FUNDING_SPENT
 import fr.acinq.eclair.{TestKitBaseClass, randomBytes32}
 import grizzled.slf4j.Logging
 import org.json4s.JsonAST.JValue
@@ -37,9 +40,12 @@ import org.scalatest.funsuite.AnyFunSuiteLike
 
 import scala.concurrent.Promise
 import scala.concurrent.duration._
+import scodec.bits.ByteVector
+import fr.acinq.eclair.KotlinUtils._
 
 class ZmqWatcherSpec extends TestKitBaseClass with AnyFunSuiteLike with BitcoindService with BeforeAndAfterAll with Logging {
 
+  implicit def bytevector322bytevector(input: ByteVector32) : ByteVector = ByteVector.view(input.toByteArray)
   var zmqBlock: ActorRef = _
   var zmqTx: ActorRef = _
 
@@ -66,10 +72,14 @@ class ZmqWatcherSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitcoind
   }
 
   test("add/remove watches from/to utxo map") {
+    import ZmqWatcher._
+    implicit def bytevector322bytevector(input: ByteVector32) : ByteVector = ByteVector.view(input.toByteArray)
+
     val m0 = Map.empty[OutPoint, Set[Watch]]
     val txid = randomBytes32
     val outputIndex = 42
-    val utxo = OutPoint(txid.reverse, outputIndex)
+
+    val utxo = new OutPoint(txid.reversed(), outputIndex)
 
     val w1 = WatchSpent(null, txid, outputIndex, randomBytes32, BITCOIN_FUNDING_SPENT)
     val w2 = WatchSpent(null, txid, outputIndex, randomBytes32, BITCOIN_FUNDING_SPENT)
@@ -85,17 +95,17 @@ class ZmqWatcherSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitcoind
     val m3 = addWatchedUtxos(m2, w3)
     assert(m3.keySet == Set(utxo) && m3(utxo).size == 3)
     val m4 = addWatchedUtxos(m3, w4)
-    assert(m4.keySet == Set(utxo, OutPoint(w4.txId.reverse, w4.outputIndex)) && m3(utxo).size == 3)
+    assert(m4.keySet == Set(utxo, new OutPoint(w4.txId.reversed(), w4.outputIndex)) && m3(utxo).size == 3)
     val m5 = addWatchedUtxos(m4, w5)
-    assert(m5.keySet == Set(utxo, OutPoint(w4.txId.reverse, w4.outputIndex)) && m5(utxo).size == 3)
+    assert(m5.keySet == Set(utxo, new OutPoint(w4.txId.reversed(), w4.outputIndex)) && m5(utxo).size == 3)
     val m6 = removeWatchedUtxos(m5, w3)
-    assert(m6.keySet == Set(utxo, OutPoint(w4.txId.reverse, w4.outputIndex)) && m6(utxo).size == 2)
+    assert(m6.keySet == Set(utxo, new OutPoint(w4.txId.reversed(), w4.outputIndex)) && m6(utxo).size == 2)
     val m7 = removeWatchedUtxos(m6, w3)
-    assert(m7.keySet == Set(utxo, OutPoint(w4.txId.reverse, w4.outputIndex)) && m7(utxo).size == 2)
+    assert(m7.keySet == Set(utxo, new OutPoint(w4.txId.reversed(), w4.outputIndex)) && m7(utxo).size == 2)
     val m8 = removeWatchedUtxos(m7, w2)
-    assert(m8.keySet == Set(utxo, OutPoint(w4.txId.reverse, w4.outputIndex)) && m8(utxo).size == 1)
+    assert(m8.keySet == Set(utxo, new OutPoint(w4.txId.reversed(), w4.outputIndex)) && m8(utxo).size == 1)
     val m9 = removeWatchedUtxos(m8, w1)
-    assert(m9.keySet == Set(OutPoint(w4.txId.reverse, w4.outputIndex)))
+    assert(m9.keySet == Set(new OutPoint(w4.txId.reversed(), w4.outputIndex)))
     val m10 = removeWatchedUtxos(m9, w4)
     assert(m10.isEmpty)
   }
@@ -127,7 +137,7 @@ class ZmqWatcherSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitcoind
     val watcher = system.actorOf(ZmqWatcher.props(blockCount, new ExtendedBitcoinClient(bitcoinrpcclient)))
     val (address, priv) = getNewAddress(bitcoincli)
     val tx = sendToAddress(bitcoincli, address, 1.0)
-    val outputIndex = tx.txOut.indexWhere(_.publicKeyScript == Script.write(Script.pay2wpkh(priv.publicKey)))
+    val outputIndex = tx.txOut.indexWhere(_.publicKeyScript.contentEquals(Script.write(Script.pay2wpkh(priv.publicKey))))
     val (tx1, tx2) = createUnspentTxChain(tx, priv)
 
     val listener = TestProbe()

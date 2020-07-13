@@ -64,13 +64,13 @@ object BitcoinCoreFeeProvider {
         json \ "feerate" match {
           case JDecimal(feerate) =>
             // estimatesmartfee returns a fee rate in Btc/KB
-            btc2satoshi(Btc(feerate)).toLong
+            Btc(feerate).toSatoshi.toLong
           case JInt(feerate) if feerate.toLong < 0 =>
             // negative value means failure
             feerate.toLong
           case JInt(feerate) =>
             // should (hopefully) never happen
-            btc2satoshi(Btc(feerate.toLong)).toLong
+            Btc(feerate.toLong).toSatoshi.toLong
         }
       case JArray(errors) =>
         val error = errors.collect { case JString(error) => error }.mkString(", ")

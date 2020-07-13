@@ -16,7 +16,7 @@
 
 package fr.acinq.eclair
 
-import fr.acinq.bitcoin.{Btc, BtcAmount, MilliBtc, Satoshi, btc2satoshi, millibtc2satoshi}
+import fr.acinq.bitcoin.{Btc, BtcAmount, MilliBtc, PimpSatoshi, Satoshi, btc2PimpSatoshi, millibtc2PimpSatoshi}
 
 /**
  * Created by t-bast on 22/08/2019.
@@ -30,8 +30,10 @@ case class MilliSatoshi(private val underlying: Long) extends Ordered[MilliSatos
   // @formatter:off
   def +(other: MilliSatoshi) = MilliSatoshi(underlying + other.underlying)
   def +(other: BtcAmount) = MilliSatoshi(underlying + other.toMilliSatoshi.underlying)
+  def +(other: Satoshi): MilliSatoshi = this + MilliSatoshi(other)
   def -(other: MilliSatoshi) = MilliSatoshi(underlying - other.underlying)
   def -(other: BtcAmount) = MilliSatoshi(underlying - other.toMilliSatoshi.underlying)
+  def -(other: Satoshi): MilliSatoshi = this - MilliSatoshi(other)
   def *(m: Long) = MilliSatoshi(underlying * m)
   def *(m: Double) = MilliSatoshi((underlying * m).toLong)
   def /(d: Long) = MilliSatoshi(underlying / d)
@@ -48,10 +50,12 @@ case class MilliSatoshi(private val underlying: Long) extends Ordered[MilliSatos
   // We provide asymmetric min/max functions to provide more control on the return type.
   def max(other: MilliSatoshi): MilliSatoshi = if (this > other) this else other
   def max(other: BtcAmount): MilliSatoshi = if (this > other) this else other.toMilliSatoshi
+  def max(other: Satoshi): MilliSatoshi = max(MilliSatoshi(other))
   def min(other: MilliSatoshi): MilliSatoshi = if (this < other) this else other
   def min(other: BtcAmount): MilliSatoshi = if (this < other) this else other.toMilliSatoshi
+  def min(other: Satoshi): MilliSatoshi = min(MilliSatoshi(other))
 
-  def truncateToSatoshi: Satoshi = Satoshi(underlying / 1000)
+  def truncateToSatoshi: Satoshi = new Satoshi(underlying / 1000)
   def toLong: Long = underlying
   override def toString = s"$underlying msat"
   // @formatter:on
@@ -59,13 +63,16 @@ case class MilliSatoshi(private val underlying: Long) extends Ordered[MilliSatos
 }
 
 object MilliSatoshi {
+  def apply(value: Satoshi) = satoshi2millisatoshi(value)
 
   private def satoshi2millisatoshi(input: Satoshi): MilliSatoshi = MilliSatoshi(input.toLong * 1000L)
 
+  def toMilliSatoshi(amount: Satoshi): MilliSatoshi = MilliSatoshi(amount)
+
   def toMilliSatoshi(amount: BtcAmount): MilliSatoshi = amount match {
-    case sat: Satoshi => satoshi2millisatoshi(sat)
-    case millis: MilliBtc => satoshi2millisatoshi(millibtc2satoshi(millis))
-    case bitcoin: Btc => satoshi2millisatoshi(btc2satoshi(bitcoin))
+    case sat: PimpSatoshi => satoshi2millisatoshi(sat)
+    case millis: MilliBtc => satoshi2millisatoshi(millibtc2PimpSatoshi(millis))
+    case bitcoin: Btc => satoshi2millisatoshi(btc2PimpSatoshi(bitcoin))
   }
 
 }

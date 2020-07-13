@@ -20,7 +20,7 @@ import akka.actor.ActorSystem
 import akka.pattern.pipe
 import akka.testkit.TestProbe
 import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
-import fr.acinq.bitcoin.Crypto.PrivateKey
+import fr.acinq.bitcoin.PrivateKey
 import fr.acinq.bitcoin.{Block, Satoshi, Script, Transaction}
 import fr.acinq.eclair.blockchain.ValidateResult
 import fr.acinq.eclair.blockchain.bitcoind.BitcoinCoreWallet
@@ -33,6 +33,8 @@ import org.scalatest.funsuite.AnyFunSuite
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext}
+import scala.jdk.CollectionConverters._
+import fr.acinq.eclair.KotlinUtils._
 
 /**
  * Created by PM on 31/05/2016.
@@ -92,7 +94,7 @@ object AnnouncementsBatchValidationSpec {
     val amount = 1000000 sat
     // first we publish the funding tx
     val wallet = new BitcoinCoreWallet(extendedBitcoinClient.rpcClient)
-    val fundingPubkeyScript = Script.write(Script.pay2wsh(Scripts.multiSig2of2(node1BitcoinKey.publicKey, node2BitcoinKey.publicKey)))
+    val fundingPubkeyScript = Script.write(Script.pay2wsh(Scripts.multiSig2of2(node1BitcoinKey.publicKey, node2BitcoinKey.publicKey).toList.asJava))
     val fundingTxFuture = wallet.makeFundingTx(fundingPubkeyScript, amount, 10000)
     val res = Await.result(fundingTxFuture, 10 seconds)
     Await.result(extendedBitcoinClient.publishTransaction(res.fundingTx), 10 seconds)

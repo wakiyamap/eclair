@@ -121,7 +121,7 @@ class BitcoinCoreFeeProviderSpec extends TestKitBaseClass with BitcoindService w
       override def invoke(method: String, params: Any*)(implicit ec: ExecutionContext): Future[JValue] = method match {
         case "estimatesmartfee" =>
           val blocks = params(0).asInstanceOf[Int]
-          val feerate = satoshi2btc(Satoshi(fees(blocks))).toBigDecimal
+          val feerate = Btc(new Satoshi(fees(blocks))).toBigDecimal
           Future(JObject(List("feerate" -> JDecimal(feerate), "blocks" -> JInt(blocks))))(ec)
         case _ => Future.failed(new RuntimeException(s"Test BasicBitcoinJsonRPCClient: method $method is not supported"))
       }

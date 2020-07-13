@@ -1,7 +1,7 @@
 package fr.acinq.eclair.channel
 
 import akka.testkit.TestProbe
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.PublicKey
 import fr.acinq.bitcoin._
 import fr.acinq.eclair.TestConstants.Alice
 import fr.acinq.eclair.blockchain.WatchEventSpent
@@ -15,6 +15,8 @@ import org.scalatest.Outcome
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
 
 import scala.concurrent.duration._
+import fr.acinq.eclair.KotlinUtils._
+
 
 class RecoverySpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with StateTestsHelperMethods {
 
@@ -87,20 +89,28 @@ class RecoverySpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with Sta
     sender.send(alice, WatchEventSpent(BITCOIN_FUNDING_SPENT, bobCommitTx))
 
     // from Bob's commit tx we can extract both funding public keys
-    val OP_2 :: OP_PUSHDATA(pub1, _) :: OP_PUSHDATA(pub2, _) :: OP_2 :: OP_CHECKMULTISIG :: Nil = Script.parse(bobCommitTx.txIn(0).witness.stack.last)
+    val (pub1, pub2) = {
+      val script = Script.parse(bobCommitTx.txIn.get(0).witness.last).toList
+      script match {
+        case OP_2.INSTANCE :: op1 :: op2 :: OP_2.INSTANCE :: OP_CHECKMULTISIG.INSTANCE :: Nil if op1.isPush(33) && op2.isPush(33) => (op1.asInstanceOf[OP_PUSHDATA].data, op2.asInstanceOf[OP_PUSHDATA].data)
+      }
+    }
+    //val OP_2.INSTANCE :: new OP_PUSHDATA(pub1) :: new OP_PUSHDATA(pub2) :: OP_2.INSTANCE :: OP_CHECKMULTISIG.INSTANCE :: Nil = Script.parse(bobCommitTx.txIn(0).witness.stack.last)
     // from Bob's commit tx we can also extract our p2wpkh output
-    val ourOutput = bobCommitTx.txOut.find(_.publicKeyScript.length == 22).get
+    val ourOutput = bobCommitTx.txOut.find(_.publicKeyScript.size() == 22).get
 
-    val OP_0 :: OP_PUSHDATA(pubKeyHash, _) :: Nil = Script.parse(ourOutput.publicKeyScript)
+    val pubKeyHash = Script.parse(ourOutput.publicKeyScript).toList match {
+      case OP_0.INSTANCE :: op :: Nil if op.isPush(20) => op.asInstanceOf[OP_PUSHDATA].data
+    }
 
     val keyManager = TestConstants.Alice.nodeParams.keyManager
 
     // find our funding pub key
-    val fundingPubKey = Seq(PublicKey(pub1), PublicKey(pub2)).find {
+    val fundingPubKey = Seq(new PublicKey(pub1), new PublicKey(pub2)).find {
       pub =>
         val channelKeyPath = KeyManager.channelKeyPath(pub)
         val localPubkey = Generators.derivePubKey(keyManager.paymentPoint(channelKeyPath).publicKey, ce.myCurrentPerCommitmentPoint)
-        localPubkey.hash160 == pubKeyHash
+        pubKeyHash.contentEquals(localPubkey.hash160)
     } get
 
     // compute our to-remote pubkey
@@ -108,16 +118,16 @@ class RecoverySpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with Sta
     val ourToRemotePubKey = Generators.derivePubKey(keyManager.paymentPoint(channelKeyPath).publicKey, ce.myCurrentPerCommitmentPoint)
 
     // spend our output
-    val tx = Transaction(version = 2,
-      txIn = TxIn(OutPoint(bobCommitTx, bobCommitTx.txOut.indexOf(ourOutput)), sequence = TxIn.SEQUENCE_FINAL, signatureScript = Nil) :: Nil,
-      txOut = TxOut(Satoshi(1000), Script.pay2pkh(fr.acinq.eclair.randomKey.publicKey)) :: Nil,
-      lockTime = 0)
+    val tx = new Transaction(2,
+      new TxIn(new OutPoint(bobCommitTx, bobCommitTx.txOut.indexOf(ourOutput)), TxIn.SEQUENCE_FINAL) :: Nil,
+      new TxOut(1000 sat, Script.pay2pkh(fr.acinq.eclair.randomKey.publicKey)) :: Nil,
+      0)
 
     val sig = keyManager.sign(
-      ClaimP2WPKHOutputTx(InputInfo(OutPoint(bobCommitTx, bobCommitTx.txOut.indexOf(ourOutput)), ourOutput, Script.pay2pkh(ourToRemotePubKey)), tx),
+      ClaimP2WPKHOutputTx(InputInfo(new OutPoint(bobCommitTx, bobCommitTx.txOut.indexOf(ourOutput)), ourOutput, Script.pay2pkh(ourToRemotePubKey)), tx),
       keyManager.paymentPoint(channelKeyPath),
       ce.myCurrentPerCommitmentPoint)
-    val tx1 = tx.updateWitness(0, ScriptWitness(Scripts.der(sig) :: ourToRemotePubKey.value :: Nil))
-    Transaction.correctlySpends(tx1, bobCommitTx :: Nil, ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
+    val tx1 = tx.updateWitness(0, new ScriptWitness(Scripts.der(sig) :: ourToRemotePubKey.value :: Nil))
+    Transaction.correctlySpends(tx1, bobCommitTx, ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
   }
 }

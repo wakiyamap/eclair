@@ -17,6 +17,7 @@
 package fr.acinq.eclair.payment
 
 import akka.actor.{Actor, ActorLogging, Props}
+import fr.acinq.bitcoin.Satoshi
 import fr.acinq.eclair.NodeParams
 import fr.acinq.eclair.channel.Helpers.Closing._
 import fr.acinq.eclair.channel.Monitoring.{Metrics => ChannelMetrics, Tags => ChannelTags}

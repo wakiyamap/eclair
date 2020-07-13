@@ -17,8 +17,8 @@
 package fr.acinq.eclair.channel
 
 import akka.event.LoggingAdapter
-import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey, sha256}
-import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto}
+import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, PrivateKey, PublicKey}
+import fr.acinq.bitcoin.Crypto.sha256
 import fr.acinq.eclair.blockchain.fee.OnChainFeeConf
 import fr.acinq.eclair.channel.Monitoring.Metrics
 import fr.acinq.eclair.crypto.{Generators, KeyManager, ShaChain, Sphinx}
@@ -30,6 +30,7 @@ import fr.acinq.eclair.wire._
 import fr.acinq.eclair.{MilliSatoshi, _}
 
 import scala.util.{Failure, Success, Try}
+import KotlinUtils._
 
 // @formatter:off
 case class LocalChanges(proposed: List[UpdateMessage], signed: List[UpdateMessage], acked: List[UpdateMessage]) {
@@ -216,15 +217,15 @@ object Commitments {
     // the funder needs to keep an extra reserve to be able to handle fee increase without getting the channel stuck
     // (see https://github.com/lightningnetwork/lightning-rfc/issues/728)
     val funderFeeReserve = htlcOutputFee(2 * reduced.feeratePerKw)
-    val missingForSender = reduced.toRemote - commitments1.remoteParams.channelReserve - (if (commitments1.localParams.isFunder) fees + funderFeeReserve else 0.msat)
+    val missingForSender = reduced.toRemote - commitments1.remoteParams.channelReserve - (if (commitments1.localParams.isFunder) funderFeeReserve + fees else 0.msat)
     val missingForReceiver = reduced.toLocal - commitments1.localParams.channelReserve - (if (commitments1.localParams.isFunder) 0.sat else fees)
     if (missingForSender < 0.msat) {
-      return Failure(InsufficientFunds(commitments.channelId, amount = cmd.amount, missing = -missingForSender.truncateToSatoshi, reserve = commitments1.remoteParams.channelReserve, fees = if (commitments1.localParams.isFunder) fees else 0.sat))
+      return Failure(InsufficientFunds(commitments.channelId, amount = cmd.amount, missing = missingForSender.truncateToSatoshi.unaryMinus(), reserve = commitments1.remoteParams.channelReserve, fees = if (commitments1.localParams.isFunder) fees else 0.sat))
     } else if (missingForReceiver < 0.msat) {
       if (commitments.localParams.isFunder) {
         // receiver is fundee; it is ok if it can't maintain its channel_reserve for now, as long as its balance is increasing, which is the case if it is receiving a payment
       } else {
-        return Failure(RemoteCannotAffordFeesForNewHtlc(commitments.channelId, amount = cmd.amount, missing = -missingForReceiver.truncateToSatoshi, reserve = commitments1.remoteParams.channelReserve, fees = fees))
+        return Failure(RemoteCannotAffordFeesForNewHtlc(commitments.channelId, amount = cmd.amount, missing = missingForReceiver.truncateToSatoshi.unaryMinus(), reserve = commitments1.remoteParams.channelReserve, fees = fees))
       }
     }
 
@@ -272,10 +273,10 @@ object Commitments {
     val missingForSender = reduced.toRemote - commitments1.localParams.channelReserve - (if (commitments1.localParams.isFunder) 0.sat else fees)
     val missingForReceiver = reduced.toLocal - commitments1.remoteParams.channelReserve - (if (commitments1.localParams.isFunder) fees else 0.sat)
     if (missingForSender < 0.sat) {
-      throw InsufficientFunds(commitments.channelId, amount = add.amountMsat, missing = -missingForSender.truncateToSatoshi, reserve = commitments1.localParams.channelReserve, fees = if (commitments1.localParams.isFunder) 0.sat else fees)
+      throw InsufficientFunds(commitments.channelId, amount = add.amountMsat, missing = missingForSender.truncateToSatoshi.unaryMinus(), reserve = commitments1.localParams.channelReserve, fees = if (commitments1.localParams.isFunder) 0.sat else fees)
     } else if (missingForReceiver < 0.sat) {
       if (commitments.localParams.isFunder) {
-        throw CannotAffordFees(commitments.channelId, missing = -missingForReceiver.truncateToSatoshi, reserve = commitments1.remoteParams.channelReserve, fees = fees)
+        throw CannotAffordFees(commitments.channelId, missing = missingForReceiver.truncateToSatoshi.unaryMinus(), reserve = commitments1.remoteParams.channelReserve, fees = fees)
       } else {
         // receiver is fundee; it is ok if it can't maintain its channel_reserve for now, as long as its balance is increasing, which is the case if it is receiving a payment
       }
@@ -315,7 +316,7 @@ object Commitments {
       case Some(htlc) if alreadyProposed(commitments.localChanges.proposed, htlc.id) =>
         // we have already sent a fail/fulfill for this htlc
         Failure(UnknownHtlcId(commitments.channelId, cmd.id))
-      case Some(htlc) if htlc.paymentHash == sha256(cmd.r) =>
+      case Some(htlc) if htlc.paymentHash == cmd.r.sha256() =>
         val fulfill = UpdateFulfillHtlc(commitments.channelId, cmd.id, cmd.r)
         val commitments1 = addLocalProposal(commitments, fulfill)
         Success((commitments1, fulfill))
@@ -325,7 +326,7 @@ object Commitments {
 
   def receiveFulfill(commitments: Commitments, fulfill: UpdateFulfillHtlc): Try[(Commitments, Origin, UpdateAddHtlc)] =
     getOutgoingHtlcCrossSigned(commitments, fulfill.id) match {
-      case Some(htlc) if htlc.paymentHash == sha256(fulfill.paymentPreimage) => Try((addRemoteProposal(commitments, fulfill), commitments.originChannels(fulfill.id), htlc))
+      case Some(htlc) if htlc.paymentHash == fulfill.paymentPreimage.sha256() => Try((addRemoteProposal(commitments, fulfill), commitments.originChannels(fulfill.id), htlc))
       case Some(_) => Failure(InvalidHtlcPreimage(commitments.channelId, fulfill.id))
       case None => Failure(UnknownHtlcId(commitments.channelId, fulfill.id))
     }
@@ -400,9 +401,9 @@ object Commitments {
       // a node cannot spend pending incoming htlcs, and need to keep funds above the reserve required by the counterparty, after paying the fee
       // we look from remote's point of view, so if local is funder remote doesn't pay the fees
       val fees = commitTxFee(commitments1.remoteParams.dustLimit, reduced)
-      val missing = reduced.toRemote.truncateToSatoshi - commitments1.remoteParams.channelReserve - fees
+      val missing = reduced.toRemote.truncateToSatoshi minus commitments1.remoteParams.channelReserve minus fees
       if (missing < 0.sat) {
-        Failure(CannotAffordFees(commitments.channelId, missing = -missing, reserve = commitments1.localParams.channelReserve, fees = fees))
+        Failure(CannotAffordFees(commitments.channelId, missing = missing.unaryMinus(), reserve = commitments1.localParams.channelReserve, fees = fees))
       } else {
         Success((commitments1, fee))
       }
@@ -433,9 +434,9 @@ object Commitments {
 
         // a node cannot spend pending incoming htlcs, and need to keep funds above the reserve required by the counterparty, after paying the fee
         val fees = commitTxFee(commitments1.remoteParams.dustLimit, reduced)
-        val missing = reduced.toRemote.truncateToSatoshi - commitments1.localParams.channelReserve - fees
+        val missing = reduced.toRemote.truncateToSatoshi minus commitments1.localParams.channelReserve minus fees
         if (missing < 0.sat) {
-          Failure(CannotAffordFees(commitments.channelId, missing = -missing, reserve = commitments1.localParams.channelReserve, fees = fees))
+          Failure(CannotAffordFees(commitments.channelId, missing = missing.unaryMinus(), reserve = commitments1.localParams.channelReserve, fees = fees))
         } else {
           Success(commitments1)
         }
@@ -453,7 +454,7 @@ object Commitments {
 
   def revocationPreimage(seed: ByteVector32, index: Long): ByteVector32 = ShaChain.shaChainFromSeed(seed, 0xFFFFFFFFFFFFFFFFL - index)
 
-  def revocationHash(seed: ByteVector32, index: Long): ByteVector32 = Crypto.sha256(revocationPreimage(seed, index))
+  def revocationHash(seed: ByteVector32, index: Long): ByteVector32 = new ByteVector32(Crypto.sha256(revocationPreimage(seed, index)))
 
   def sendCommit(commitments: Commitments, keyManager: KeyManager)(implicit log: LoggingAdapter): Try[(Commitments, CommitSig)] = {
     import commitments._

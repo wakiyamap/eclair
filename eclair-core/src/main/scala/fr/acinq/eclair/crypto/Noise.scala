@@ -19,8 +19,7 @@ package fr.acinq.eclair.crypto
 import java.math.BigInteger
 import java.nio.ByteOrder
 
-import fr.acinq.bitcoin.Crypto.PrivateKey
-import fr.acinq.bitcoin.{Crypto, Protocol}
+import fr.acinq.bitcoin.{BtcSerializer, Crypto, PrivateKey, Protocol}
 import fr.acinq.eclair.randomBytes
 import grizzled.slf4j.Logging
 import org.spongycastle.crypto.digests.SHA256Digest
@@ -33,7 +32,13 @@ import scodec.bits.ByteVector
   */
 object Noise {
 
+  implicit def bytearray2bytevector(input: Array[Byte]): ByteVector = ByteVector.view(input)
+
   case class KeyPair(pub: ByteVector, priv: ByteVector)
+
+  object KeyPair {
+    def apply(pub: Array[Byte], priv: Array[Byte]) = new KeyPair(ByteVector.view(pub), ByteVector.view(priv))
+  }
 
   /**
     * Diffie-Helmann functions
@@ -55,7 +60,7 @@ object Noise {
 
     override def generateKeyPair(priv: ByteVector): KeyPair = {
       require(priv.length == 32)
-      KeyPair(PrivateKey(priv).publicKey.value, priv)
+      KeyPair(ByteVector.view(new PrivateKey(priv.toArray).publicKey.value.toByteArray()), priv)
     }
 
     /**
@@ -66,10 +71,8 @@ object Noise {
       * @return sha256(publicKey * keyPair.priv in compressed format)
       */
     override def dh(keyPair: KeyPair, publicKey: ByteVector): ByteVector = {
-      val point = Crypto.curve.getCurve.decodePoint(publicKey.toArray)
-      val scalar = new BigInteger(1, keyPair.priv.take(32).toArray)
-      val point1 = point.multiply(scalar).normalize()
-      Crypto.sha256(ByteVector.view(point1.getEncoded(true)))
+      val secret = fr.acinq.bitcoin.crypto.Secp256k1.INSTANCE.ecdh(keyPair.priv.toArray, publicKey.toArray)
+      ByteVector.view(secret)
     }
 
     override def dhLen: Int = 32
@@ -98,7 +101,7 @@ object Noise {
     override val name = "ChaChaPoly"
 
     // as specified in BOLT #8
-    def nonce(n: Long): ByteVector = ByteVector.fill(4)(0) ++ Protocol.writeUInt64(n, ByteOrder.LITTLE_ENDIAN)
+    def nonce(n: Long): ByteVector = ByteVector.fill(4)(0) ++ ByteVector.view(BtcSerializer.writeUInt64(n))
 
     // Encrypts plaintext using the cipher key k of 32 bytes and an 8-byte unsigned integer nonce n which must be unique.
     override def encrypt(k: ByteVector, n: Long, ad: ByteVector, plaintext: ByteVector): ByteVector = {
@@ -154,7 +157,7 @@ object Noise {
 
     override val blockLen = 64
 
-    override def hash(data: ByteVector) = Crypto.sha256(data)
+    override def hash(data: ByteVector) = ByteVector.view(Crypto.sha256(data.toArray))
 
     override def hmacHash(key: ByteVector, data: ByteVector): ByteVector = {
       val mac = new HMac(new SHA256Digest())
@@ -177,6 +180,8 @@ object Noise {
     def hasKey: Boolean
 
     def encryptWithAd(ad: ByteVector, plaintext: ByteVector): (CipherState, ByteVector)
+
+    def encryptWithAd(ad: ByteVector, plaintext: Array[Byte]): (CipherState, ByteVector) = encryptWithAd(ad, ByteVector.view(plaintext))
 
     def decryptWithAd(ad: ByteVector, ciphertext: ByteVector): (CipherState, ByteVector)
   }

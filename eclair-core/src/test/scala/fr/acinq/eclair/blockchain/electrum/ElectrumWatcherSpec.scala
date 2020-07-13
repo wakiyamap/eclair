@@ -21,8 +21,11 @@ import java.util.concurrent.atomic.AtomicLong
 
 import akka.actor.Props
 import akka.testkit.{TestKit, TestProbe}
-import fr.acinq.bitcoin.{ByteVector32, OutPoint, SIGHASH_ALL, Script, ScriptFlags, ScriptWitness, SigVersion, Transaction, TxIn, TxOut}
 import fr.acinq.eclair.blockchain.WatcherSpec._
+import fr.acinq.bitcoin.PrivateKey
+import fr.acinq.bitcoin.{Base58, Bech32, ByteVector32, Hex, OutPoint, SigHash, Script, ScriptFlags, ScriptWitness, SigVersion, Transaction, TxIn, TxOut}
+import SigHash.SIGHASH_ALL
+import fr.acinq.bitcoin.{ByteVector => ByteVectorAcinq }
 import fr.acinq.eclair.blockchain._
 import fr.acinq.eclair.blockchain.bitcoind.BitcoindService
 import fr.acinq.eclair.blockchain.bitcoind.BitcoindService.BitcoinReq
@@ -34,9 +37,9 @@ import grizzled.slf4j.Logging
 import org.json4s.JsonAST.JValue
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuiteLike
-import scodec.bits._
 
 import scala.concurrent.duration._
+import fr.acinq.eclair.KotlinUtils._
 
 class ElectrumWatcherSpec extends TestKitBaseClass with AnyFunSuiteLike with BitcoindService with ElectrumxService with BeforeAndAfterAll with Logging {
 
@@ -66,7 +69,7 @@ class ElectrumWatcherSpec extends TestKitBaseClass with AnyFunSuiteLike with Bit
     val tx = sendToAddress(bitcoincli, address, 1.0)
 
     val listener = TestProbe()
-    probe.send(watcher, WatchConfirmed(listener.ref, tx.txid, tx.txOut(0).publicKeyScript, 4, BITCOIN_FUNDING_DEPTHOK))
+    probe.send(watcher, WatchConfirmed(listener.ref, tx.txid, tx.txOut.get(0).publicKeyScript, 4, BITCOIN_FUNDING_DEPTHOK))
     generateBlocks(bitcoincli, 5)
     val confirmed = listener.expectMsgType[WatchEventConfirmed](20 seconds)
     assert(confirmed.tx.txid === tx.txid)
@@ -83,16 +86,16 @@ class ElectrumWatcherSpec extends TestKitBaseClass with AnyFunSuiteLike with Bit
     val tx = sendToAddress(bitcoincli, address, 1.0)
 
     // find the output for the address we generated and create a tx that spends it
-    val pos = tx.txOut.indexWhere(_.publicKeyScript == Script.write(Script.pay2wpkh(priv.publicKey)))
+    val pos = tx.txOut.indexWhere(_.publicKeyScript.contentEquals(Script.write(Script.pay2wpkh(priv.publicKey))))
     assert(pos != -1)
     val spendingTx = {
-      val tmp = Transaction(version = 2,
-        txIn = TxIn(OutPoint(tx, pos), signatureScript = Nil, sequence = TxIn.SEQUENCE_FINAL) :: Nil,
-        txOut = TxOut(tx.txOut(pos).amount - 1000.sat, publicKeyScript = Script.pay2wpkh(priv.publicKey)) :: Nil,
-        lockTime = 0)
-      val sig = Transaction.signInput(tmp, 0, Script.pay2pkh(priv.publicKey), SIGHASH_ALL, tx.txOut(pos).amount, SigVersion.SIGVERSION_WITNESS_V0, priv)
-      val signedTx = tmp.updateWitness(0, ScriptWitness(sig :: priv.publicKey.value :: Nil))
-      Transaction.correctlySpends(signedTx, Seq(tx), ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
+      val tmp = new Transaction(2,
+        new TxIn(new OutPoint(tx, pos), TxIn.SEQUENCE_FINAL) :: Nil,
+        new TxOut(tx.txOut(pos).amount minus 1000.sat, Script.pay2wpkh(priv.publicKey)) :: Nil,
+        0)
+      val sig = new ByteVectorAcinq(Transaction.signInput(tmp, 0, Script.pay2pkh(priv.publicKey), SIGHASH_ALL, tx.txOut(pos).amount, SigVersion.SIGVERSION_WITNESS_V0, priv))
+      val signedTx = tmp.updateWitness(0, new ScriptWitness(sig :: priv.publicKey.value :: Nil))
+      Transaction.correctlySpends(signedTx, tx, ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS, null)
       signedTx
     }
 
@@ -183,7 +186,7 @@ class ElectrumWatcherSpec extends TestKitBaseClass with AnyFunSuiteLike with Bit
 
     {
       // tx is in the blockchain
-      val txid = ByteVector32(hex"c0b18008713360d7c30dae0940d88152a4bbb10faef5a69fefca5f7a7e1a06cc")
+      val txid = new ByteVector32("c0b18008713360d7c30dae0940d88152a4bbb10faef5a69fefca5f7a7e1a06cc")
       probe.send(watcher, GetTxWithMeta(txid))
       val res = probe.expectMsgType[GetTxWithMetaResponse]
       assert(res.txid === txid)
@@ -193,7 +196,7 @@ class ElectrumWatcherSpec extends TestKitBaseClass with AnyFunSuiteLike with Bit
 
     {
       // tx doesn't exist
-      val txid = ByteVector32(hex"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+      val txid = new ByteVector32("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
       probe.send(watcher, GetTxWithMeta(txid))
       val res = probe.expectMsgType[GetTxWithMetaResponse]
       assert(res.txid === txid)

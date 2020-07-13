@@ -39,6 +39,7 @@ import org.scalatest.funsuite.FixtureAnyFunSuiteLike
 import scodec.bits.ByteVector
 
 import scala.concurrent.duration._
+import fr.acinq.eclair.KotlinUtils._
 
 /**
  * Created by PM on 29/08/2016.
@@ -360,7 +361,7 @@ class RelayerSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike {
     // we use this to build a valid onion
     val (cmd, _) = buildCommand(Upstream.Local(UUID.randomUUID()), paymentHash, hops, FinalLegacyPayload(finalAmount, finalExpiry))
     // and then manually build an htlc with an invalid onion (hmac)
-    val add_ab = UpdateAddHtlc(channelId = channelId_ab, id = 123456, cmd.amount, cmd.paymentHash, cmd.cltvExpiry, cmd.onion.copy(hmac = cmd.onion.hmac.reverse))
+    val add_ab = UpdateAddHtlc(channelId = channelId_ab, id = 123456, cmd.amount, cmd.paymentHash, cmd.cltvExpiry, cmd.onion.copy(hmac = cmd.onion.hmac.reversed()))
     relayer ! LocalChannelUpdate(null, channelId_bc, channelUpdate_bc.shortChannelId, c, None, channelUpdate_bc, makeCommitments(channelId_bc))
 
     sender.send(relayer, ForwardAdd(add_ab))
@@ -527,7 +528,7 @@ class RelayerSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike {
 
     // A sends a multi-payment to trampoline node B.
     val preimage = randomBytes32
-    val paymentHash = Crypto.sha256(preimage)
+    val paymentHash = new ByteVector32(Crypto.sha256(preimage))
     val trampolineHops = NodeHop(a, b, channelUpdate_ab.cltvExpiryDelta, 0 msat) :: NodeHop(b, c, nodeParams.expiryDeltaBlocks, nodeFee(nodeParams.feeBase, nodeParams.feeProportionalMillionth, finalAmount)) :: Nil
     val (trampolineAmount, trampolineExpiry, trampolineOnion) = buildPacket(Sphinx.TrampolinePacket)(paymentHash, trampolineHops, Onion.createMultiPartPayload(finalAmount, finalAmount, finalExpiry, paymentSecret))
     val secret_ab = randomBytes32
@@ -573,7 +574,7 @@ class RelayerSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike {
 
     // we build a fake htlc for the downstream channel
     val add_bc = UpdateAddHtlc(channelId = channelId_bc, id = 72, amountMsat = 10000000 msat, paymentHash = ByteVector32.Zeroes, CltvExpiry(4200), onionRoutingPacket = TestConstants.emptyOnionPacket)
-    val fail_ba = UpdateFailHtlc(channelId = channelId_bc, id = 72, reason = Sphinx.FailurePacket.create(ByteVector32(ByteVector.fill(32)(1)), TemporaryChannelFailure(channelUpdate_cd)))
+    val fail_ba = UpdateFailHtlc(channelId = channelId_bc, id = 72, reason = Sphinx.FailurePacket.create(new ByteVector32("01" * 32), TemporaryChannelFailure(channelUpdate_cd)))
     val origin = Relayed(channelId_ab, 42, 11000000 msat, 10000000 msat)
     for (fail <- Seq(ForwardRemoteFail(fail_ba, origin, add_bc), ForwardOnChainFail(HtlcOverriddenByLocalCommit(channelId_bc, add_bc), origin, add_bc))) {
       sender.send(relayer, fail)
@@ -590,7 +591,7 @@ class RelayerSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike {
 
     // we build a fake htlc for the downstream channel
     val add_bc = UpdateAddHtlc(channelId = channelId_bc, id = 72, amountMsat = 10000000 msat, paymentHash = ByteVector32.Zeroes, CltvExpiry(4200), onionRoutingPacket = TestConstants.emptyOnionPacket)
-    val fail_ba = UpdateFailHtlc(channelId = channelId_bc, id = 72, reason = Sphinx.FailurePacket.create(ByteVector32(ByteVector.fill(32)(1)), TemporaryChannelFailure(channelUpdate_cd)))
+    val fail_ba = UpdateFailHtlc(channelId = channelId_bc, id = 72, reason = Sphinx.FailurePacket.create(new ByteVector32("01" * 32), TemporaryChannelFailure(channelUpdate_cd)))
     val origin = TrampolineRelayed(List((channelId_ab, 42), (randomBytes32, 7)), Some(payFSM.ref))
     val remoteFailure = ForwardRemoteFail(fail_ba, origin, add_bc)
 

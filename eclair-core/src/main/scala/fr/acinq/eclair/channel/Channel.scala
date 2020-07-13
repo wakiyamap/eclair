@@ -19,7 +19,8 @@ package fr.acinq.eclair.channel
 import akka.actor.{ActorRef, FSM, OneForOneStrategy, Props, Status, SupervisorStrategy}
 import akka.event.Logging.MDC
 import akka.pattern.pipe
-import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
+import fr.acinq.bitcoin.{PrivateKey, PublicKey}
+import fr.acinq.bitcoin.Crypto.sha256
 import fr.acinq.bitcoin.{ByteVector32, OutPoint, Satoshi, Script, ScriptFlags, Transaction}
 import fr.acinq.eclair.Features.StaticRemoteKey
 import fr.acinq.eclair.Logs.LogCategory
@@ -41,7 +42,8 @@ import scala.collection.immutable.Queue
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
-
+import scala.jdk.CollectionConverters._
+import KotlinUtils._
 /**
  * Created by PM on 20/08/2015.
  */
@@ -107,6 +109,7 @@ class Channel(val nodeParams: NodeParams, val wallet: EclairWallet, remoteNodeId
 
   // we pass these to helpers classes so that they have the logging context
   implicit def implicitLog: akka.event.DiagnosticLoggingAdapter = diagLog
+  implicit def bytevector2bytearray(input: ByteVector): Array[Byte] = input.toArray
 
   // we assume that the peer is the channel's parent
   private val peer = context.parent
@@ -552,7 +555,7 @@ class Channel(val nodeParams: NodeParams, val wallet: EclairWallet, remoteNodeId
       stay using d.copy(deferred = Some(msg)) // no need to store, they will re-send if we get disconnected
 
     case Event(WatchEventConfirmed(BITCOIN_FUNDING_DEPTHOK, blockHeight, txIndex, fundingTx), d@DATA_WAIT_FOR_FUNDING_CONFIRMED(commitments, _, _, deferred, _)) =>
-      Try(Transaction.correctlySpends(commitments.localCommit.publishableTxs.commitTx.tx, Seq(fundingTx), ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)) match {
+      Try(Transaction.correctlySpends(commitments.localCommit.publishableTxs.commitTx.tx, fundingTx, ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS, null)) match {
         case Success(_) =>
           log.info(s"channelId=${commitments.channelId} was confirmed at blockHeight=$blockHeight txIndex=$txIndex")
           blockchain ! WatchLost(self, commitments.commitInput.outPoint.txid, nodeParams.minDepthBlocks, BITCOIN_FUNDING_LOST)
@@ -566,7 +569,7 @@ class Channel(val nodeParams: NodeParams, val wallet: EclairWallet, remoteNodeId
           val shortChannelId = ShortChannelId(blockHeight, txIndex, commitments.commitInput.outPoint.index.toInt)
           goto(WAIT_FOR_FUNDING_LOCKED) using DATA_WAIT_FOR_FUNDING_LOCKED(commitments, shortChannelId, fundingLocked) storing() sending fundingLocked
         case Failure(t) =>
-          log.error(t, s"rejecting channel with invalid funding tx: ${fundingTx.bin}")
+          log.error(t, s"rejecting channel with invalid funding tx: ${fundingTx}")
           goto(CLOSED)
       }
 
@@ -1416,7 +1419,7 @@ class Channel(val nodeParams: NodeParams, val wallet: EclairWallet, remoteNodeId
         channelId = d.channelId,
         nextLocalCommitmentNumber = d.commitments.localCommit.index + 1,
         nextRemoteRevocationNumber = d.commitments.remoteCommit.index,
-        yourLastPerCommitmentSecret = PrivateKey(yourLastPerCommitmentSecret),
+        yourLastPerCommitmentSecret = new PrivateKey(yourLastPerCommitmentSecret),
         myCurrentPerCommitmentPoint = myCurrentPerCommitmentPoint
       )
 

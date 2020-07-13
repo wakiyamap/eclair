@@ -20,7 +20,7 @@ import java.util.UUID
 
 import akka.actor.ActorRef
 import akka.testkit.{TestActorRef, TestProbe}
-import fr.acinq.bitcoin.Block
+import fr.acinq.bitcoin.{Block, ByteVector32}
 import fr.acinq.eclair.FeatureSupport.Optional
 import fr.acinq.eclair.Features._
 import fr.acinq.eclair.UInt64.Conversions._
@@ -49,6 +49,8 @@ import scala.concurrent.duration._
  */
 
 class PaymentInitiatorSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike {
+
+  implicit def bytevarray2bytevector32(input: Array[Byte]) : ByteVector32 = new ByteVector32(input)
 
   case class FixtureParam(nodeParams: NodeParams, initiator: TestActorRef[PaymentInitiator], payFsm: TestProbe, multiPartPayFsm: TestProbe, sender: TestProbe, eventListener: TestProbe)
 

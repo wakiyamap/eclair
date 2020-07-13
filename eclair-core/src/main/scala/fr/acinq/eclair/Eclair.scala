@@ -21,7 +21,7 @@ import java.util.UUID
 import akka.actor.ActorRef
 import akka.pattern._
 import akka.util.Timeout
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin._
 import fr.acinq.bitcoin.{ByteVector32, Satoshi}
 import fr.acinq.eclair.TimestampQueryFilters._
 import fr.acinq.eclair.blockchain.OnChainBalance
@@ -276,7 +276,7 @@ class EclairImpl(appKit: Kit) extends Eclair {
     val defaultRouteParams = RouteCalculation.getDefaultRouteParams(appKit.nodeParams.routerConf)
     val routeParams = defaultRouteParams.copy(
       maxFeePct = maxFeePct_opt.getOrElse(defaultRouteParams.maxFeePct),
-      maxFeeBase = feeThreshold_opt.map(_.toMilliSatoshi).getOrElse(defaultRouteParams.maxFeeBase)
+      maxFeeBase = feeThreshold_opt.map(s => MilliSatoshi(s)).getOrElse(defaultRouteParams.maxFeeBase)
     )
 
     externalId_opt match {

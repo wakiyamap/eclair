@@ -18,9 +18,9 @@ package fr.acinq.eclair.router
 
 import akka.actor.ActorRef
 import akka.testkit.TestProbe
-import fr.acinq.bitcoin.Crypto.PrivateKey
+import fr.acinq.bitcoin.PrivateKey
 import fr.acinq.bitcoin.Script.{pay2wsh, write}
-import fr.acinq.bitcoin.{Block, ByteVector32, Transaction, TxOut}
+import fr.acinq.bitcoin.{Block, ByteVector32, Hex, PrivateKey, Transaction, TxOut}
 import fr.acinq.eclair.TestConstants.Alice
 import fr.acinq.eclair.blockchain.{UtxoStatus, ValidateRequest, ValidateResult, WatchSpentBasic}
 import fr.acinq.eclair.channel.{CommitmentsSpec, LocalChannelUpdate}
@@ -36,6 +36,8 @@ import org.scalatest.funsuite.FixtureAnyFunSuiteLike
 import scodec.bits.{ByteVector, HexStringSyntax}
 
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
+import fr.acinq.eclair.KotlinUtils._
 
 /**
  * Base class for router testing.
@@ -47,11 +49,11 @@ abstract class BaseRouterSpec extends TestKitBaseClass with FixtureAnyFunSuiteLi
 
   case class FixtureParam(nodeParams: NodeParams, router: ActorRef, watcher: TestProbe)
 
-  val remoteNodeId = PrivateKey(ByteVector32(ByteVector.fill(32)(1))).publicKey
+  val remoteNodeId = new PrivateKey(Hex.decode("01" * 32)).publicKey
   val publicChannelCapacity = 1000000 sat
   val htlcMaximum = 500000000 msat
 
-  val seed = ByteVector32(ByteVector.fill(32)(2))
+  val seed = new ByteVector32("02" * 32)
   val testKeyManager = new LocalKeyManager(seed, Block.RegtestGenesisBlock.hash)
 
   val (priv_a, priv_b, priv_c, priv_d, priv_e, priv_f, priv_g, priv_h) = (testKeyManager.nodeKey.privateKey, randomKey, randomKey, randomKey, randomKey, randomKey, randomKey, randomKey)
@@ -160,11 +162,11 @@ abstract class BaseRouterSpec extends TestKitBaseClass with FixtureAnyFunSuiteLi
       watcher.expectMsg(ValidateRequest(chan_ef))
       watcher.expectMsg(ValidateRequest(chan_gh))
       // and answers with valid scripts
-      watcher.send(router, ValidateResult(chan_ab, Right((Transaction(version = 0, txIn = Nil, txOut = TxOut(publicChannelCapacity, write(pay2wsh(Scripts.multiSig2of2(funding_a, funding_b)))) :: Nil, lockTime = 0), UtxoStatus.Unspent))))
-      watcher.send(router, ValidateResult(chan_bc, Right((Transaction(version = 0, txIn = Nil, txOut = TxOut(publicChannelCapacity, write(pay2wsh(Scripts.multiSig2of2(funding_b, funding_c)))) :: Nil, lockTime = 0), UtxoStatus.Unspent))))
-      watcher.send(router, ValidateResult(chan_cd, Right((Transaction(version = 0, txIn = Nil, txOut = TxOut(publicChannelCapacity, write(pay2wsh(Scripts.multiSig2of2(funding_c, funding_d)))) :: Nil, lockTime = 0), UtxoStatus.Unspent))))
-      watcher.send(router, ValidateResult(chan_ef, Right((Transaction(version = 0, txIn = Nil, txOut = TxOut(publicChannelCapacity, write(pay2wsh(Scripts.multiSig2of2(funding_e, funding_f)))) :: Nil, lockTime = 0), UtxoStatus.Unspent))))
-      watcher.send(router, ValidateResult(chan_gh, Right((Transaction(version = 0, txIn = Nil, txOut = TxOut(publicChannelCapacity, write(pay2wsh(Scripts.multiSig2of2(funding_g, funding_h)))) :: Nil, lockTime = 0), UtxoStatus.Unspent))))
+      watcher.send(router, ValidateResult(chan_ab, Right((new Transaction(0,Nil, new TxOut(publicChannelCapacity, write(pay2wsh(Scripts.multiSig2of2(funding_a, funding_b)))) :: Nil, 0), UtxoStatus.Unspent))))
+      watcher.send(router, ValidateResult(chan_bc, Right((new Transaction(0,Nil, new TxOut(publicChannelCapacity, write(pay2wsh(Scripts.multiSig2of2(funding_b, funding_c)))) :: Nil, 0), UtxoStatus.Unspent))))
+      watcher.send(router, ValidateResult(chan_cd, Right((new Transaction(0,Nil, new TxOut(publicChannelCapacity, write(pay2wsh(Scripts.multiSig2of2(funding_c, funding_d)))) :: Nil, 0), UtxoStatus.Unspent))))
+      watcher.send(router, ValidateResult(chan_ef, Right((new Transaction(0,Nil, new TxOut(publicChannelCapacity, write(pay2wsh(Scripts.multiSig2of2(funding_e, funding_f)))) :: Nil, 0), UtxoStatus.Unspent))))
+      watcher.send(router, ValidateResult(chan_gh, Right((new Transaction(0,Nil, new TxOut(publicChannelCapacity, write(pay2wsh(Scripts.multiSig2of2(funding_g, funding_h)))) :: Nil, 0), UtxoStatus.Unspent))))
       // watcher receives watch-spent request
       watcher.expectMsgType[WatchSpentBasic]
       watcher.expectMsgType[WatchSpentBasic]

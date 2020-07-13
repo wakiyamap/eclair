@@ -18,7 +18,7 @@ package fr.acinq.eclair.db.sqlite
 
 import java.sql.Connection
 
-import fr.acinq.bitcoin.{ByteVector32, Crypto, Satoshi}
+import fr.acinq.bitcoin.{ByteVector32, Crypto, PublicKey, Satoshi}
 import fr.acinq.eclair.ShortChannelId
 import fr.acinq.eclair.db.Monitoring.Metrics.withMetrics
 import fr.acinq.eclair.db.NetworkDb
@@ -60,7 +60,7 @@ class SqliteNetworkDb(sqlite: Connection) extends NetworkDb with Logging {
 
   override def addNode(n: NodeAnnouncement): Unit = withMetrics("network/add-node") {
     using(sqlite.prepareStatement("INSERT OR IGNORE INTO nodes VALUES (?, ?)")) { statement =>
-      statement.setBytes(1, n.nodeId.value.toArray)
+      statement.setBytes(1, n.nodeId.value.toByteArray)
       statement.setBytes(2, nodeAnnouncementCodec.encode(n).require.toByteArray)
       statement.executeUpdate()
     }
@@ -69,22 +69,22 @@ class SqliteNetworkDb(sqlite: Connection) extends NetworkDb with Logging {
   override def updateNode(n: NodeAnnouncement): Unit = withMetrics("network/update-node") {
     using(sqlite.prepareStatement("UPDATE nodes SET data=? WHERE node_id=?")) { statement =>
       statement.setBytes(1, nodeAnnouncementCodec.encode(n).require.toByteArray)
-      statement.setBytes(2, n.nodeId.value.toArray)
+      statement.setBytes(2, n.nodeId.value.toByteArray)
       statement.executeUpdate()
     }
   }
 
-  override def getNode(nodeId: Crypto.PublicKey): Option[NodeAnnouncement] = withMetrics("network/get-node") {
+  override def getNode(nodeId: PublicKey): Option[NodeAnnouncement] = withMetrics("network/get-node") {
     using(sqlite.prepareStatement("SELECT data FROM nodes WHERE node_id=?")) { statement =>
-      statement.setBytes(1, nodeId.value.toArray)
+      statement.setBytes(1, nodeId.value.toByteArray)
       val rs = statement.executeQuery()
       codecSequence(rs, nodeAnnouncementCodec).headOption
     }
   }
 
-  override def removeNode(nodeId: Crypto.PublicKey): Unit = withMetrics("network/remove-node") {
+  override def removeNode(nodeId: PublicKey): Unit = withMetrics("network/remove-node") {
     using(sqlite.prepareStatement("DELETE FROM nodes WHERE node_id=?")) { statement =>
-      statement.setBytes(1, nodeId.value.toArray)
+      statement.setBytes(1, nodeId.value.toByteArray)
       statement.executeUpdate()
     }
   }
@@ -125,7 +125,7 @@ class SqliteNetworkDb(sqlite: Connection) extends NetworkDb with Logging {
         val capacity = rs.getLong("capacity_sat")
         val channel_update_1_opt = rs.getBitVectorOpt("channel_update_1").map(channelUpdateCodec.decode(_).require.value)
         val channel_update_2_opt = rs.getBitVectorOpt("channel_update_2").map(channelUpdateCodec.decode(_).require.value)
-        m = m + (ann.shortChannelId -> PublicChannel(ann, txId, Satoshi(capacity), channel_update_1_opt, channel_update_2_opt, None))
+        m = m + (ann.shortChannelId -> PublicChannel(ann, txId, new Satoshi(capacity), channel_update_1_opt, channel_update_2_opt, None))
       }
       m
     }

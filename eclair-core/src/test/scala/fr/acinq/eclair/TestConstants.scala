@@ -21,7 +21,7 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
 import com.opentable.db.postgres.embedded.EmbeddedPostgres
-import fr.acinq.bitcoin.Crypto.PrivateKey
+import fr.acinq.bitcoin.PrivateKey
 import fr.acinq.bitcoin.{Block, ByteVector32, Script}
 import fr.acinq.eclair.FeatureSupport.Optional
 import fr.acinq.eclair.Features._
@@ -38,11 +38,14 @@ import fr.acinq.eclair.wire.{Color, EncodingType, NodeAddress}
 import scodec.bits.ByteVector
 
 import scala.concurrent.duration._
+import fr.acinq.eclair.KotlinUtils._
 
 /**
  * Created by PM on 26/04/2016.
  */
 object TestConstants {
+  implicit def bytevector322bytevector(input: ByteVector32) : ByteVector = ByteVector.view(input.toByteArray)
+  implicit def byteaerray2bytevector(input: Array[Byte]): ByteVector = ByteVector.view(input)
 
   val defaultBlockHeight = 400000
   val fundingSatoshis = 1000000L sat
@@ -120,7 +123,7 @@ object TestConstants {
   def inMemoryDb(connection: Connection = sqliteInMemory()): Databases = Databases.sqliteDatabaseByConnections(connection, connection, connection)
 
   object Alice {
-    val seed = ByteVector32(ByteVector.fill(32)(1))
+    val seed = new ByteVector32("0101010101010101010101010101010101010101010101010101010101010101")
     val keyManager = new LocalKeyManager(seed, Block.RegtestGenesisBlock.hash)
 
     // This is a function, and not a val! When called will return a new NodeParams
@@ -203,7 +206,7 @@ object TestConstants {
 
     def channelParams = Peer.makeChannelParams(
       nodeParams,
-      Script.write(Script.pay2wpkh(PrivateKey(randomBytes32).publicKey)),
+      Script.write(Script.pay2wpkh(new PrivateKey(randomBytes32).publicKey)),
       None,
       true,
       fundingSatoshis
@@ -213,7 +216,7 @@ object TestConstants {
   }
 
   object Bob {
-    val seed = ByteVector32(ByteVector.fill(32)(2))
+    val seed = new ByteVector32("0202020202020202020202020202020202020202020202020202020202020202")
     val keyManager = new LocalKeyManager(seed, Block.RegtestGenesisBlock.hash)
 
     def nodeParams = NodeParams(
@@ -290,7 +293,7 @@ object TestConstants {
 
     def channelParams = Peer.makeChannelParams(
       nodeParams,
-      Script.write(Script.pay2wpkh(PrivateKey(randomBytes32).publicKey)),
+      Script.write(Script.pay2wpkh(new PrivateKey(randomBytes32).publicKey)),
       None,
       false,
       fundingSatoshis).copy(

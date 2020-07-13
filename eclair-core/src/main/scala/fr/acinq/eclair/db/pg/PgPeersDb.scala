@@ -17,7 +17,7 @@
 package fr.acinq.eclair.db.pg
 
 import fr.acinq.bitcoin.Crypto
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.PublicKey
 import fr.acinq.eclair.db.Monitoring.Metrics.withMetrics
 import fr.acinq.eclair.db.PeersDb
 import fr.acinq.eclair.db.pg.PgUtils.DatabaseLock
@@ -41,7 +41,7 @@ class PgPeersDb(implicit ds: DataSource, lock: DatabaseLock) extends PeersDb {
     }
   }
 
-  override def addOrUpdatePeer(nodeId: Crypto.PublicKey, nodeaddress: NodeAddress): Unit = withMetrics("peers/add-or-update") {
+  override def addOrUpdatePeer(nodeId: PublicKey, nodeaddress: NodeAddress): Unit = withMetrics("peers/add-or-update") {
     withLock { pg =>
       val data = CommonCodecs.nodeaddress.encode(nodeaddress).require.toByteArray
       using(pg.prepareStatement("UPDATE peers SET data=? WHERE node_id=?")) { update =>
@@ -58,7 +58,7 @@ class PgPeersDb(implicit ds: DataSource, lock: DatabaseLock) extends PeersDb {
     }
   }
 
-  override def removePeer(nodeId: Crypto.PublicKey): Unit = withMetrics("peers/remove") {
+  override def removePeer(nodeId: PublicKey): Unit = withMetrics("peers/remove") {
     withLock { pg =>
       using(pg.prepareStatement("DELETE FROM peers WHERE node_id=?")) { statement =>
         statement.setString(1, nodeId.value.toHex)
@@ -83,7 +83,7 @@ class PgPeersDb(implicit ds: DataSource, lock: DatabaseLock) extends PeersDb {
         val rs = statement.executeQuery("SELECT node_id, data FROM peers")
         var m: Map[PublicKey, NodeAddress] = Map()
         while (rs.next()) {
-          val nodeid = PublicKey(rs.getByteVectorFromHex("node_id"))
+          val nodeid = new PublicKey(rs.getByteVectorFromHex("node_id"))
           val nodeaddress = CommonCodecs.nodeaddress.decode(BitVector(rs.getBytes("data"))).require.value
           m += (nodeid -> nodeaddress)
         }

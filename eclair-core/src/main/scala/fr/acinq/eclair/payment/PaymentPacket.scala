@@ -18,7 +18,7 @@ package fr.acinq.eclair.payment
 
 import akka.event.LoggingAdapter
 import fr.acinq.bitcoin.ByteVector32
-import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
+import fr.acinq.bitcoin.{PrivateKey, PublicKey}
 import fr.acinq.eclair.Features.VariableLengthOnion
 import fr.acinq.eclair.channel.{CMD_ADD_HTLC, Upstream}
 import fr.acinq.eclair.crypto.Sphinx

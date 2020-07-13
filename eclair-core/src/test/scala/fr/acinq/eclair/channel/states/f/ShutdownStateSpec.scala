@@ -20,8 +20,7 @@ import java.util.UUID
 
 import akka.actor.Status.Failure
 import akka.testkit.TestProbe
-import fr.acinq.bitcoin.Crypto.PrivateKey
-import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, ScriptFlags, Transaction}
+import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, PrivateKey, Satoshi, ScriptFlags, Transaction}
 import fr.acinq.eclair.blockchain._
 import fr.acinq.eclair.blockchain.fee.FeeratesPerKw
 import fr.acinq.eclair.channel._
@@ -38,6 +37,7 @@ import org.scalatest.funsuite.FixtureAnyFunSuiteLike
 import scodec.bits.ByteVector
 
 import scala.concurrent.duration._
+import fr.acinq.eclair.KotlinUtils._
 
 /**
  * Created by PM on 05/07/2016.
@@ -46,6 +46,8 @@ import scala.concurrent.duration._
 class ShutdownStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with StateTestsHelperMethods {
 
   type FixtureParam = SetupFixture
+  implicit def bytevarray2bytevector32(input: Array[Byte]) : ByteVector32 = new ByteVector32(input)
+  implicit def bytevarray2bytevector(input: Array[Byte]) : ByteVector = ByteVector.view(input)
 
   val r1 = randomBytes32
   val r2 = randomBytes32
@@ -230,7 +232,7 @@ class ShutdownStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike wit
     import f._
     val sender = TestProbe()
     val initialState = bob.stateData.asInstanceOf[DATA_SHUTDOWN]
-    sender.send(bob, CMD_FAIL_MALFORMED_HTLC(1, Crypto.sha256(ByteVector.empty), FailureMessageCodecs.BADONION))
+    sender.send(bob, CMD_FAIL_MALFORMED_HTLC(1, new ByteVector32(Crypto.sha256(Array.emptyByteArray)), FailureMessageCodecs.BADONION))
     sender.expectMsg(ChannelCommandResponse.Ok)
     val fail = bob2alice.expectMsgType[UpdateFailMalformedHtlc]
     awaitCond(bob.stateData == initialState.copy(
@@ -294,7 +296,7 @@ class ShutdownStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike wit
     import f._
     val sender = TestProbe()
     val initialState = alice.stateData.asInstanceOf[DATA_SHUTDOWN]
-    val fail = UpdateFailMalformedHtlc(ByteVector32.Zeroes, 1, Crypto.sha256(ByteVector.empty), FailureMessageCodecs.BADONION)
+    val fail = UpdateFailMalformedHtlc(ByteVector32.Zeroes, 1, new ByteVector32(Crypto.sha256(Array.emptyByteArray)), FailureMessageCodecs.BADONION)
     sender.send(alice, fail)
     awaitCond(alice.stateData.asInstanceOf[DATA_SHUTDOWN].commitments == initialState.commitments.copy(remoteChanges = initialState.commitments.remoteChanges.copy(initialState.commitments.remoteChanges.proposed :+ fail)))
   }
@@ -303,7 +305,7 @@ class ShutdownStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike wit
     import f._
     val sender = TestProbe()
     val tx = alice.stateData.asInstanceOf[DATA_SHUTDOWN].commitments.localCommit.publishableTxs.commitTx.tx
-    val fail = UpdateFailMalformedHtlc(ByteVector32.Zeroes, 1, Crypto.sha256(ByteVector.empty), 42)
+    val fail = UpdateFailMalformedHtlc(ByteVector32.Zeroes, 1, new ByteVector32(Crypto.sha256(Array.emptyByteArray)), 42)
     sender.send(alice, fail)
     val error = alice2bob.expectMsgType[Error]
     assert(new String(error.data.toArray) === InvalidFailureCode(ByteVector32.Zeroes).getMessage)
@@ -452,7 +454,7 @@ class ShutdownStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike wit
     bob2alice.forward(alice)
     alice2bob.expectMsgType[RevokeAndAck]
     awaitCond(bob.stateData.asInstanceOf[DATA_SHUTDOWN].commitments.remoteNextCommitInfo.isLeft)
-    sender.send(bob, RevokeAndAck(ByteVector32.Zeroes, PrivateKey(randomBytes32), PrivateKey(randomBytes32).publicKey))
+    sender.send(bob, RevokeAndAck(ByteVector32.Zeroes, new PrivateKey(randomBytes32), new PrivateKey(randomBytes32).publicKey))
     bob2alice.expectMsgType[Error]
     awaitCond(bob.stateName == CLOSING)
     bob2blockchain.expectMsg(PublishAsap(tx)) // commit tx
@@ -467,7 +469,7 @@ class ShutdownStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike wit
     val tx = alice.stateData.asInstanceOf[DATA_SHUTDOWN].commitments.localCommit.publishableTxs.commitTx.tx
     val sender = TestProbe()
     awaitCond(alice.stateData.asInstanceOf[DATA_SHUTDOWN].commitments.remoteNextCommitInfo.isRight)
-    sender.send(alice, RevokeAndAck(ByteVector32.Zeroes, PrivateKey(randomBytes32), PrivateKey(randomBytes32).publicKey))
+    sender.send(alice, RevokeAndAck(ByteVector32.Zeroes, new PrivateKey(randomBytes32), new PrivateKey(randomBytes32).publicKey))
     alice2bob.expectMsgType[Error]
     awaitCond(alice.stateName == CLOSING)
     alice2blockchain.expectMsg(PublishAsap(tx)) // commit tx
@@ -508,7 +510,7 @@ class ShutdownStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike wit
   test("recv RevokeAndAck (forward UpdateFailMalformedHtlc)") { f =>
     import f._
     val sender = TestProbe()
-    sender.send(bob, CMD_FAIL_MALFORMED_HTLC(1, Crypto.sha256(ByteVector.view("should be htlc.onionRoutingPacket".getBytes())), FailureMessageCodecs.BADONION))
+    sender.send(bob, CMD_FAIL_MALFORMED_HTLC(1, new ByteVector32(Crypto.sha256("should be htlc.onionRoutingPacket".getBytes())), FailureMessageCodecs.BADONION))
     sender.expectMsg(ChannelCommandResponse.Ok)
     val fail = bob2alice.expectMsgType[UpdateFailMalformedHtlc]
     bob2alice.forward(alice)

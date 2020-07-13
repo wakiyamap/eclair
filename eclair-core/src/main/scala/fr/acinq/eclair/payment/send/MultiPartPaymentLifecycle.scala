@@ -22,8 +22,9 @@ import java.util.concurrent.TimeUnit
 import akka.actor.{ActorRef, FSM, Props, Status}
 import akka.event.Logging.MDC
 import fr.acinq.bitcoin.ByteVector32
-import fr.acinq.bitcoin.Crypto.PublicKey
-import fr.acinq.eclair.channel.Upstream
+import fr.acinq.bitcoin.PublicKey
+import fr.acinq.eclair.channel.{Commitments, Upstream}
+import fr.acinq.eclair.crypto.Sphinx
 import fr.acinq.eclair.payment.Monitoring.{Metrics, Tags}
 import fr.acinq.eclair.payment.PaymentRequest.ExtraHop
 import fr.acinq.eclair.payment.PaymentSent.PartialPayment
@@ -36,7 +37,11 @@ import fr.acinq.eclair.wire._
 import fr.acinq.eclair.{CltvExpiry, FSMDiagnosticActorLogging, Logs, LongToBtcAmount, MilliSatoshi, NodeParams}
 import kamon.Kamon
 import kamon.context.Context
+import scodec.bits.ByteVector
 
+import scala.annotation.tailrec
+import scala.util.Random
+import fr.acinq.eclair.KotlinUtils._
 /**
  * Created by t-bast on 18/07/2019.
  */

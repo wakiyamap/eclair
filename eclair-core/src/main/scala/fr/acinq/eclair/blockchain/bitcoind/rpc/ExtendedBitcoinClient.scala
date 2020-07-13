@@ -18,7 +18,7 @@ package fr.acinq.eclair.blockchain.bitcoind.rpc
 
 import fr.acinq.bitcoin._
 import fr.acinq.eclair.ShortChannelId.coordinates
-import fr.acinq.eclair.TxCoordinates
+import fr.acinq.eclair.{KotlinUtils, TxCoordinates}
 import fr.acinq.eclair.blockchain.{GetTxWithMetaResponse, UtxoStatus, ValidateResult}
 import fr.acinq.eclair.wire.ChannelAnnouncement
 import kamon.Kamon
@@ -26,6 +26,9 @@ import org.json4s.JsonAST._
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
+import scala.collection.JavaConverters._
+import KotlinUtils._
+
 
 /**
   * Created by PM on 26/04/2016.
@@ -56,7 +59,7 @@ class ExtendedBitcoinClient(val rpcClient: BitcoinJsonRPCClient) {
       }
       // with a verbosity of 0, getblock returns the raw serialized block
       block <- rpcClient.invoke("getblock", blockhash, 0).collect { case JString(b) => Block.read(b) }
-      prevblockhash = block.header.hashPreviousBlock.reverse
+      prevblockhash = block.header.hashPreviousBlock.reversed()
       res <- block.tx.find(tx => tx.txIn.exists(i => i.outPoint.txid == txid && i.outPoint.index == outputIndex)) match {
         case None => lookForSpendingTx(Some(prevblockhash), txid, outputIndex)
         case Some(tx) => Future.successful(tx)

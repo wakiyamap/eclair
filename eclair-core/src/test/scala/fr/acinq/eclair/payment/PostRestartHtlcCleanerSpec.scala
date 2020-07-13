@@ -40,6 +40,8 @@ import scodec.bits.ByteVector
 
 import scala.concurrent.Promise
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
+import fr.acinq.eclair.KotlinUtils._
 
 /**
  * Created by t-bast on 21/11/2019.
@@ -496,6 +498,7 @@ class PostRestartHtlcCleanerSpec extends TestKitBaseClass with FixtureAnyFunSuit
 }
 
 object PostRestartHtlcCleanerSpec {
+  implicit def bytevarray2bytevector32(input: Array[Byte]) : ByteVector32 = new ByteVector32(input)
 
   val channelId_ab_1 = randomBytes32
   val channelId_ab_2 = randomBytes32
@@ -506,7 +509,7 @@ object PostRestartHtlcCleanerSpec {
   val channelId_bc_5 = randomBytes32
 
   val (preimage1, preimage2, preimage3) = (randomBytes32, randomBytes32, randomBytes32)
-  val (paymentHash1, paymentHash2, paymentHash3) = (Crypto.sha256(preimage1), Crypto.sha256(preimage2), Crypto.sha256(preimage3))
+  val (paymentHash1, paymentHash2, paymentHash3) = (preimage1.sha256(), preimage2.sha256(), preimage3.sha256())
 
   def buildHtlc(htlcId: Long, channelId: ByteVector32, paymentHash: ByteVector32): UpdateAddHtlc = {
     val (cmd, _) = buildCommand(Upstream.Local(UUID.randomUUID()), paymentHash, hops, FinalLegacyPayload(finalAmount, finalExpiry))

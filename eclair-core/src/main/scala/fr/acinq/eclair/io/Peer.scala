@@ -23,9 +23,7 @@ import akka.event.Logging.MDC
 import akka.event.{BusLogging, DiagnosticLoggingAdapter}
 import akka.util.Timeout
 import com.google.common.net.HostAndPort
-import fr.acinq.bitcoin.Crypto.PublicKey
-import fr.acinq.bitcoin.{ByteVector32, DeterministicWallet, Satoshi, Script}
-import fr.acinq.eclair.FeatureSupport.Optional
+import fr.acinq.bitcoin.{ByteVector32, DeterministicWallet, KeyPath, PublicKey, Satoshi, Script}
 import fr.acinq.eclair.Features.{StaticRemoteKey, Wumbo, canUseFeature}
 import fr.acinq.eclair.Logs.LogCategory
 import fr.acinq.eclair.blockchain.EclairWallet
@@ -35,6 +33,7 @@ import fr.acinq.eclair.io.Monitoring.Metrics
 import fr.acinq.eclair.wire._
 import fr.acinq.eclair.{wire, _}
 import scodec.bits.ByteVector
+import KotlinUtils._
 
 /**
  * This actor represents a logical peer. There is one [[Peer]] per unique remote node id at all time.
@@ -287,7 +286,7 @@ class Peer(val nodeParams: NodeParams, remoteNodeId: PublicKey, watcher: ActorRe
     val (finalScript, localPaymentBasepoint) = channelVersion match {
       case v if v.hasStaticRemotekey =>
         val walletKey = Helpers.getWalletPaymentBasepoint(wallet)
-        (Script.write(Script.pay2wpkh(walletKey)), Some(walletKey))
+        (ByteVector.view(Script.write(Script.pay2wpkh(walletKey))), Some(walletKey))
       case _ =>
         (Helpers.getFinalScriptPubKey(wallet, nodeParams.chainHash), None)
     }
@@ -404,13 +403,13 @@ object Peer {
     makeChannelParams(nodeParams, defaultFinalScriptPubkey, localPaymentBasepoint, isFunder, fundingAmount, fundingKeyPath)
   }
 
-  def makeChannelParams(nodeParams: NodeParams, defaultFinalScriptPubkey: ByteVector, staticPaymentBasepoint: Option[PublicKey], isFunder: Boolean, fundingAmount: Satoshi, fundingKeyPath: DeterministicWallet.KeyPath): LocalParams = {
+  def makeChannelParams(nodeParams: NodeParams, defaultFinalScriptPubkey: ByteVector, staticPaymentBasepoint: Option[PublicKey], isFunder: Boolean, fundingAmount: Satoshi, fundingKeyPath: KeyPath): LocalParams = {
     LocalParams(
       nodeParams.nodeId,
       fundingKeyPath,
       dustLimit = nodeParams.dustLimit,
       maxHtlcValueInFlightMsat = nodeParams.maxHtlcValueInFlightMsat,
-      channelReserve = (fundingAmount * nodeParams.reserveToFundingRatio).max(nodeParams.dustLimit), // BOLT #2: make sure that our reserve is above our dust limit
+      channelReserve = (fundingAmount times nodeParams.reserveToFundingRatio).max(nodeParams.dustLimit), // BOLT #2: make sure that our reserve is above our dust limit
       htlcMinimum = nodeParams.htlcMinimum,
       toSelfDelay = nodeParams.toRemoteDelayBlocks, // we choose their delay
       maxAcceptedHtlcs = nodeParams.maxAcceptedHtlcs,

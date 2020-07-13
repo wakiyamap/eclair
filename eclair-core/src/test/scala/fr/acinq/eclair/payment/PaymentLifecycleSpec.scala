@@ -21,9 +21,8 @@ import java.util.UUID
 import akka.actor.FSM.{CurrentState, SubscribeTransitionCallBack, Transition}
 import akka.actor.{ActorRef, Status}
 import akka.testkit.{TestFSMRef, TestProbe}
-import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.bitcoin.Script.{pay2wsh, write}
-import fr.acinq.bitcoin.{Block, ByteVector32, Crypto, Transaction, TxOut}
+import fr.acinq.bitcoin.{Block, ByteVector32, Crypto, PublicKey, Transaction, TxOut}
 import fr.acinq.eclair._
 import fr.acinq.eclair.blockchain.{UtxoStatus, ValidateRequest, ValidateResult, WatchSpentBasic}
 import fr.acinq.eclair.channel.Register.ForwardShortId
@@ -38,20 +37,26 @@ import fr.acinq.eclair.payment.relay.{Origin, Relayer}
 import fr.acinq.eclair.payment.send.PaymentInitiator.{SendPaymentConfig, SendPaymentRequest}
 import fr.acinq.eclair.payment.send.PaymentLifecycle
 import fr.acinq.eclair.payment.send.PaymentLifecycle._
-import fr.acinq.eclair.router.Announcements.makeChannelUpdate
+import fr.acinq.eclair.router.Announcements.{makeChannelUpdate, makeNodeAnnouncement}
 import fr.acinq.eclair.router.Router._
 import fr.acinq.eclair.router._
 import fr.acinq.eclair.transactions.Scripts
 import fr.acinq.eclair.wire.Onion.FinalLegacyPayload
 import fr.acinq.eclair.wire._
+import scodec.bits.{ByteVector, HexStringSyntax}
 
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
+import fr.acinq.eclair.KotlinUtils._
 
 /**
  * Created by PM on 29/08/2016.
  */
 
 class PaymentLifecycleSpec extends BaseRouterSpec {
+  implicit def bytevarray2bytevector(input: Array[Byte]) : ByteVector = ByteVector.view(input)
+  implicit def bytevarray2bytevector32(input: Array[Byte]) : ByteVector32 = new ByteVector32(input)
+  implicit def bytevector322bytevector(input: ByteVector32) : ByteVector = ByteVector.view(input.toByteArray)
 
   val defaultAmountMsat = 142000000 msat
   val defaultMaxFee = 4260000 msat // 3% of defaultAmountMsat
@@ -545,7 +550,7 @@ class PaymentLifecycleSpec extends BaseRouterSpec {
     router ! PeerRoutingMessage(peerConnection.ref, remoteNodeId, channelUpdate_bh)
     router ! PeerRoutingMessage(peerConnection.ref, remoteNodeId, channelUpdate_hb)
     watcher.expectMsg(ValidateRequest(chan_bh))
-    watcher.send(router, ValidateResult(chan_bh, Right((Transaction(version = 0, txIn = Nil, txOut = TxOut(1000000 sat, write(pay2wsh(Scripts.multiSig2of2(funding_b, funding_h)))) :: Nil, lockTime = 0), UtxoStatus.Unspent))))
+    watcher.send(router, ValidateResult(chan_bh, Right((new Transaction(0, Nil, new  TxOut(1000000 sat, write(pay2wsh(Scripts.multiSig2of2(funding_b, funding_h)))) :: Nil, 0), UtxoStatus.Unspent))))
     watcher.expectMsgType[WatchSpentBasic]
 
     val payFixture = createPaymentLifecycle()

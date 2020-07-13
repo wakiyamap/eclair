@@ -20,7 +20,8 @@ import java.util.UUID
 
 import akka.actor.{ActorRef, Status}
 import akka.testkit.{TestFSMRef, TestProbe}
-import fr.acinq.bitcoin.{Block, Crypto}
+import fr.acinq.bitcoin.{Block, ByteVector32, Crypto, Satoshi}
+import fr.acinq.eclair.TestConstants.TestFeeEstimator
 import fr.acinq.eclair._
 import fr.acinq.eclair.channel.{AddHtlcFailed, ChannelFlags, ChannelUnavailable, Upstream}
 import fr.acinq.eclair.crypto.Sphinx
@@ -37,6 +38,8 @@ import org.scalatest.funsuite.FixtureAnyFunSuiteLike
 import scodec.bits.{ByteVector, HexStringSyntax}
 
 import scala.concurrent.duration._
+import scala.util.Random
+import fr.acinq.eclair.KotlinUtils._
 
 /**
  * Created by t-bast on 18/07/2019.
@@ -45,6 +48,7 @@ import scala.concurrent.duration._
 class MultiPartPaymentLifecycleSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike {
 
   import MultiPartPaymentLifecycleSpec._
+  implicit def bytevarray2bytevector32(input: Array[Byte]) : ByteVector32 = new ByteVector32(input)
 
   case class FixtureParam(cfg: SendPaymentConfig,
                           nodeParams: NodeParams,
@@ -455,7 +459,7 @@ class MultiPartPaymentLifecycleSpec extends TestKitBaseClass with FixtureAnyFunS
 object MultiPartPaymentLifecycleSpec {
 
   val paymentPreimage = randomBytes32
-  val paymentHash = Crypto.sha256(paymentPreimage)
+  val paymentHash = paymentPreimage.sha256()
   val expiry = CltvExpiry(1105)
   val finalAmount = 1000000 msat
   val finalRecipient = randomKey.publicKey

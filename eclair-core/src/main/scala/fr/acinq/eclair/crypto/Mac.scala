@@ -35,14 +35,21 @@ trait Mac32 {
 
   def verify(mac: ByteVector32, message: ByteVector): Boolean
 
+  def verify(mac: ByteVector32, message: Array[Byte]): Boolean = verify(mac, ByteVector.view(message))
+
 }
 
 case class Hmac256(key: ByteVector) extends Mac32 {
 
   override def mac(message: ByteVector): ByteVector32 = Mac32.hmac256(key, message)
 
-  override def verify(mac: ByteVector32, message: ByteVector): Boolean = this.mac(message) === mac
+  override def verify(mac: ByteVector32, message: ByteVector): Boolean = this.mac(message) == mac
 
+}
+
+object Hmac256 {
+  def apply(key: Array[Byte]) = new Hmac256(ByteVector.view(key))
+  def apply(key: ByteVector32) = new Hmac256(ByteVector.view(key.toByteArray))
 }
 
 object Mac32 {
@@ -53,7 +60,10 @@ object Mac32 {
     mac.update(message.toArray, 0, message.length.toInt)
     val output = new Array[Byte](32)
     mac.doFinal(output, 0)
-    ByteVector32(ByteVector.view(output))
+    new ByteVector32(output)
   }
 
+  def hmac256(key: ByteVector, message: ByteVector32): ByteVector32 = {
+    hmac256(key, ByteVector.view(message.toByteArray))
+  }
 }

@@ -20,7 +20,7 @@ import java.net.InetSocketAddress
 
 import akka.actor.{ActorRef, FSM, OneForOneStrategy, PoisonPill, Props, Status, SupervisorStrategy, Terminated}
 import akka.event.Logging.MDC
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.PublicKey
 import fr.acinq.eclair.Logs.LogCategory
 import fr.acinq.eclair.crypto.Noise.KeyPair
 import fr.acinq.eclair.crypto.TransportHandler
@@ -69,8 +69,8 @@ class PeerConnection(nodeParams: NodeParams, switchboard: ActorRef, router: Acto
         case None =>
           Metrics.PeerConnectionsConnecting.withTag(Tags.ConnectionState, Tags.ConnectionStates.Authenticating).increment()
           context.actorOf(TransportHandler.props(
-            keyPair = KeyPair(nodeParams.nodeId.value, nodeParams.privateKey.value),
-            rs = p.remoteNodeId_opt.map(_.value),
+            keyPair = KeyPair(nodeParams.nodeId.value.toByteArray, nodeParams.privateKey.value.toByteArray),
+            rs = p.remoteNodeId_opt.map(b => ByteVector.view(b.value.toByteArray)),
             connection = p.connection,
             codec = LightningMessageCodecs.meteredLightningMessageCodec),
             name = "transport")

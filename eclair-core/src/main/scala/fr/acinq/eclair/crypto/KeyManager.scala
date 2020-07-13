@@ -19,9 +19,9 @@ package fr.acinq.eclair.crypto
 import java.io.ByteArrayInputStream
 import java.nio.ByteOrder
 
-import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
+import fr.acinq.bitcoin.{BtcSerializer, ByteVector32, ByteVector64, Crypto, DeterministicWallet, KeyPath, PrivateKey, Protocol, PublicKey}
 import fr.acinq.bitcoin.DeterministicWallet.ExtendedPublicKey
-import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, DeterministicWallet, Protocol}
+import fr.acinq.bitcoin.crypto.Pack
 import fr.acinq.eclair.{Features, ShortChannelId}
 import fr.acinq.eclair.channel.{ChannelVersion, LocalParams}
 import fr.acinq.eclair.transactions.Transactions.TransactionWithInputInfo
@@ -31,21 +31,21 @@ trait KeyManager {
 
   def nodeId: PublicKey
 
-  def fundingPublicKey(keyPath: DeterministicWallet.KeyPath): ExtendedPublicKey
+  def fundingPublicKey(keyPath: KeyPath): ExtendedPublicKey
 
-  def revocationPoint(channelKeyPath: DeterministicWallet.KeyPath): ExtendedPublicKey
+  def revocationPoint(channelKeyPath: KeyPath): ExtendedPublicKey
 
-  def paymentPoint(channelKeyPath: DeterministicWallet.KeyPath): ExtendedPublicKey
+  def paymentPoint(channelKeyPath: KeyPath): ExtendedPublicKey
 
-  def delayedPaymentPoint(channelKeyPath: DeterministicWallet.KeyPath): ExtendedPublicKey
+  def delayedPaymentPoint(channelKeyPath: KeyPath): ExtendedPublicKey
 
-  def htlcPoint(channelKeyPath: DeterministicWallet.KeyPath): ExtendedPublicKey
+  def htlcPoint(channelKeyPath: KeyPath): ExtendedPublicKey
 
-  def commitmentSecret(channelKeyPath: DeterministicWallet.KeyPath, index: Long): Crypto.PrivateKey
+  def commitmentSecret(channelKeyPath: KeyPath, index: Long): PrivateKey
 
-  def commitmentPoint(channelKeyPath: DeterministicWallet.KeyPath, index: Long): Crypto.PublicKey
+  def commitmentPoint(channelKeyPath: KeyPath, index: Long): PublicKey
 
-  def channelKeyPath(localParams: LocalParams, channelVersion: ChannelVersion): DeterministicWallet.KeyPath = if (channelVersion.hasPubkeyKeyPath) {
+  def channelKeyPath(localParams: LocalParams, channelVersion: ChannelVersion): KeyPath = if (channelVersion.hasPubkeyKeyPath) {
     // deterministic mode: use the funding pubkey to compute the channel key path
     KeyManager.channelKeyPath(fundingPublicKey(localParams.fundingKeyPath))
   } else {
@@ -60,7 +60,7 @@ trait KeyManager {
    *         - with a specific "chain" prefix
    *         - with a specific "funding pubkey" suffix
    */
-  def newFundingKeyPath(isFunder: Boolean) : DeterministicWallet.KeyPath
+  def newFundingKeyPath(isFunder: Boolean) : KeyPath
 
   /**
     *
@@ -105,7 +105,7 @@ trait KeyManager {
     * @return a (nodeSig, bitcoinSig) pair. nodeSig is the signature of the channel announcement with our node's
     *         private key, bitcoinSig is the signature of the channel announcement with our funding private key
     */
-  def signChannelAnnouncement(fundingKeyPath: DeterministicWallet.KeyPath, chainHash: ByteVector32, shortChannelId: ShortChannelId, remoteNodeId: PublicKey, remoteFundingKey: PublicKey, features: Features): (ByteVector64, ByteVector64)
+  def signChannelAnnouncement(fundingKeyPath: KeyPath, chainHash: ByteVector32, shortChannelId: ShortChannelId, remoteNodeId: PublicKey, remoteFundingKey: PublicKey, features: Features): (ByteVector64, ByteVector64)
 }
 
 object KeyManager {
@@ -119,12 +119,12 @@ object KeyManager {
     * @param fundingPubKey funding public key
     * @return a BIP32 path
     */
-  def channelKeyPath(fundingPubKey: PublicKey) : DeterministicWallet.KeyPath = {
+  def channelKeyPath(fundingPubKey: PublicKey) : KeyPath = {
+    import scala.jdk.CollectionConverters._
     val buffer = Crypto.sha256(fundingPubKey.value)
-    val bis = new ByteArrayInputStream(buffer.toArray)
-    def next() = Protocol.uint32(bis, ByteOrder.BIG_ENDIAN)
-    DeterministicWallet.KeyPath(Seq(next(), next(), next(), next(), next(), next(), next(), next()))
+    def next(counter: Int): java.lang.Long = Pack.INSTANCE.uint32BE(buffer, 4 * counter).toLong & 0xffffffffL  //Protocol.uint32(bis, ByteOrder.BIG_ENDIAN)
+    new KeyPath(List(next(0), next(1), next(2), next(3), next(4), next(5), next(6), next(7)).asJava)
   }
 
-  def channelKeyPath(fundingPubKey: DeterministicWallet.ExtendedPublicKey) : DeterministicWallet.KeyPath = channelKeyPath(fundingPubKey.publicKey)
+  def channelKeyPath(fundingPubKey: DeterministicWallet.ExtendedPublicKey) : KeyPath = channelKeyPath(fundingPubKey.publicKey)
 }

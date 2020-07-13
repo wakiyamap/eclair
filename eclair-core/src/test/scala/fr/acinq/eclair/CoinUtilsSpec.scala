@@ -86,11 +86,11 @@ class CoinUtilsSpec  extends AnyFunSuite with ParallelTestExecution {
     assert(CoinUtils.rawAmountInUnit(MilliSatoshi(12345678), BtcUnit) == BigDecimal(0.00012345678))
     assert(CoinUtils.rawAmountInUnit(MilliSatoshi(1234567), BitUnit) == BigDecimal(12.34567))
 
-    assert(CoinUtils.rawAmountInUnit(Satoshi(123), BtcUnit) == BigDecimal(0.00000123))
-    assert(CoinUtils.rawAmountInUnit(Satoshi(123), MBtcUnit) == BigDecimal(0.00123))
-    assert(CoinUtils.rawAmountInUnit(Satoshi(123), BitUnit) == BigDecimal(1.23))
-    assert(CoinUtils.rawAmountInUnit(Satoshi(123), SatUnit) == BigDecimal(123))
-    assert(CoinUtils.rawAmountInUnit(Satoshi(123), MSatUnit) == BigDecimal(123000))
+    assert(CoinUtils.rawAmountInUnit(new Satoshi(123), BtcUnit) == BigDecimal(0.00000123))
+    assert(CoinUtils.rawAmountInUnit(new Satoshi(123), MBtcUnit) == BigDecimal(0.00123))
+    assert(CoinUtils.rawAmountInUnit(new Satoshi(123), BitUnit) == BigDecimal(1.23))
+    assert(CoinUtils.rawAmountInUnit(new Satoshi(123), SatUnit) == BigDecimal(123))
+    assert(CoinUtils.rawAmountInUnit(new Satoshi(123), MSatUnit) == BigDecimal(123000))
 
     assert(CoinUtils.rawAmountInUnit(MilliBtc(123.456), BtcUnit) == BigDecimal(0.123456))
     assert(CoinUtils.rawAmountInUnit(MilliBtc(123.456), MBtcUnit) == BigDecimal(123.456))

@@ -16,8 +16,8 @@
 
 package fr.acinq.eclair.crypto
 
-import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
-import fr.acinq.bitcoin.{ByteVector32, Crypto}
+import fr.acinq.bitcoin.{Crypto, PrivateKey, PublicKey}
+import fr.acinq.bitcoin.ByteVector32
 import fr.acinq.eclair.crypto.Monitoring.{Metrics, Tags}
 import fr.acinq.eclair.wire
 import fr.acinq.eclair.wire.{FailureMessage, FailureMessageCodecs, Onion, OnionCodecs}
@@ -34,10 +34,16 @@ import scala.util.{Failure, Success, Try}
  */
 object Sphinx extends Logging {
 
+  implicit def bytevector32tbytevector(input: ByteVector32): ByteVector = ByteVector.view(input.toByteArray)
+  implicit def byteVector2bytearray(input: ByteVector): Array[Byte] = input.toArray
+  implicit def bytearray2bytevector32(input: Array[Byte]): ByteVector32 = new ByteVector32(input)
+
   // We use HMAC-SHA256 which returns 32-bytes message authentication codes.
   val MacLength = 32
 
   def mac(key: ByteVector, message: ByteVector): ByteVector32 = Mac32.hmac256(key, message)
+
+  def mac(key: ByteVector32, message: ByteVector): ByteVector32 = mac(ByteVector.view(key.toByteArray), message)
 
   def generateKey(keyType: ByteVector, secret: ByteVector32): ByteVector32 = Mac32.hmac256(keyType, secret)
 
@@ -47,11 +53,15 @@ object Sphinx extends Logging {
 
   def generateStream(key: ByteVector, length: Int): ByteVector = ChaCha20.encrypt(zeroes(length), key, zeroes(12))
 
-  def computeSharedSecret(pub: PublicKey, secret: PrivateKey): ByteVector32 = Crypto.sha256(pub.multiply(secret).value)
+  def generateStream(key: ByteVector32, length: Int): ByteVector = generateStream(ByteVector.view(key.toByteArray), length)
 
-  def computeBlindingFactor(pub: PublicKey, secret: ByteVector): ByteVector32 = Crypto.sha256(pub.value ++ secret)
+  def computeSharedSecret(pub: PublicKey, secret: PrivateKey): ByteVector32 = new ByteVector32(Crypto.sha256(pub.times(secret).value))
 
-  def blind(pub: PublicKey, blindingFactor: ByteVector32): PublicKey = pub.multiply(PrivateKey(blindingFactor))
+  def computeBlindingFactor(pub: PublicKey, secret: ByteVector): ByteVector32 = new ByteVector32(Crypto.sha256(pub.value concat secret.toArray))
+
+  def computeBlindingFactor(pub: PublicKey, secret: ByteVector32): ByteVector32 = computeBlindingFactor(pub, ByteVector.view(secret.toByteArray))
+
+  def blind(pub: PublicKey, blindingFactor: ByteVector32): PublicKey = pub.times(new PrivateKey(blindingFactor))
 
   def blind(pub: PublicKey, blindingFactors: Seq[ByteVector32]): PublicKey = blindingFactors.foldLeft(pub)(blind)
 
@@ -63,7 +73,7 @@ object Sphinx extends Logging {
    * @return a tuple (ephemeral public keys, shared secrets).
    */
   def computeEphemeralPublicKeysAndSharedSecrets(sessionKey: PrivateKey, publicKeys: Seq[PublicKey]): (Seq[PublicKey], Seq[ByteVector32]) = {
-    val ephemeralPublicKey0 = blind(PublicKey(Crypto.curve.getG), sessionKey.value)
+    val ephemeralPublicKey0 = blind(PublicKey.Generator, sessionKey.value)
     val secret0 = computeSharedSecret(publicKeys.head, sessionKey)
     val blindingFactor0 = computeBlindingFactor(ephemeralPublicKey0, secret0)
     computeEphemeralPublicKeysAndSharedSecrets(sessionKey, publicKeys.tail, Seq(ephemeralPublicKey0), Seq(blindingFactor0), Seq(secret0))
@@ -172,7 +182,7 @@ object Sphinx extends Logging {
      *         or a BadOnion error containing the hash of the invalid onion.
      */
     def peel(privateKey: PrivateKey, associatedData: ByteVector, packet: wire.OnionRoutingPacket): Either[wire.BadOnion, DecryptedPacket] = packet.version match {
-      case 0 => Try(PublicKey(packet.publicKey, checkValid = true)) match {
+      case 0 => Try(new PublicKey(packet.publicKey.toArray)) match {
         case Success(packetEphKey) =>
           val sharedSecret = computeSharedSecret(packetEphKey, privateKey)
           val mu = generateKey("mu", sharedSecret)
@@ -187,11 +197,11 @@ object Sphinx extends Logging {
             val perHopPayloadLength = peekPayloadLength(bin)
             val perHopPayload = bin.take(perHopPayloadLength - MacLength)
 
-            val hmac = ByteVector32(bin.slice(perHopPayloadLength - MacLength, perHopPayloadLength))
+            val hmac = new ByteVector32(bin.slice(perHopPayloadLength - MacLength, perHopPayloadLength).toArray)
             val nextOnionPayload = bin.drop(perHopPayloadLength).take(PayloadLength)
             val nextPubKey = blind(packetEphKey, computeBlindingFactor(packetEphKey, sharedSecret))
 
-            Right(DecryptedPacket(perHopPayload, wire.OnionRoutingPacket(Version, nextPubKey.value, nextOnionPayload, hmac), sharedSecret))
+            Right(DecryptedPacket(perHopPayload, wire.OnionRoutingPacket(Version, nextPubKey, nextOnionPayload, hmac), sharedSecret))
           } else {
             Left(wire.InvalidOnionHmac(hash(packet)))
           }
@@ -200,7 +210,11 @@ object Sphinx extends Logging {
       case _ => Left(wire.InvalidOnionVersion(hash(packet)))
     }
 
-    /**
+    def peel(privateKey: PrivateKey, associatedData: ByteVector32, packet: wire.OnionRoutingPacket): Either[wire.BadOnion, DecryptedPacket] = {
+      peel(privateKey, ByteVector.view(associatedData.toByteArray), packet)
+    }
+
+      /**
      * Wrap the given packet in an additional layer of onion encryption, adding an encrypted payload for a specific
      * node.
      *
@@ -234,7 +248,7 @@ object Sphinx extends Logging {
       }
 
       val nextHmac = mac(generateKey("mu", sharedSecret), nextOnionPayload ++ associatedData)
-      val nextPacket = wire.OnionRoutingPacket(Version, ephemeralPublicKey.value, nextOnionPayload, nextHmac)
+      val nextPacket = wire.OnionRoutingPacket(Version, ephemeralPublicKey, nextOnionPayload, nextHmac)
       nextPacket
     }
 

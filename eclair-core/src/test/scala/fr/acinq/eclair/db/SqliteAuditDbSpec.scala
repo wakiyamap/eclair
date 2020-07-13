@@ -18,8 +18,7 @@ package fr.acinq.eclair.db
 
 import java.util.UUID
 
-import fr.acinq.bitcoin.Crypto.PrivateKey
-import fr.acinq.bitcoin.{ByteVector32, Transaction}
+import fr.acinq.bitcoin.{ByteVector32, PrivateKey, Transaction, TxIn, TxOut}
 import fr.acinq.eclair.TestConstants.{TestPgDatabases, TestSqliteDatabases, forAllDbs}
 import fr.acinq.eclair._
 import fr.acinq.eclair.channel.{ChannelErrorOccurred, LocalError, NetworkFeePaid, RemoteError}
@@ -31,6 +30,8 @@ import org.scalatest.funsuite.AnyFunSuite
 
 import scala.concurrent.duration._
 import scala.util.Random
+import scala.jdk.CollectionConverters._
+import fr.acinq.eclair.KotlinUtils._
 
 class SqliteAuditDbSpec extends AnyFunSuite {
 
@@ -52,7 +53,7 @@ class SqliteAuditDbSpec extends AnyFunSuite {
       val pp2b = PaymentReceived.PartialPayment(42100 msat, randomBytes32)
       val e2 = PaymentReceived(randomBytes32, pp2a :: pp2b :: Nil)
       val e3 = ChannelPaymentRelayed(42000 msat, 1000 msat, randomBytes32, randomBytes32, randomBytes32)
-      val e4 = NetworkFeePaid(null, randomKey.publicKey, randomBytes32, Transaction(0, Seq.empty, Seq.empty, 0), 42 sat, "mutual")
+      val e4 = NetworkFeePaid(null, randomKey.publicKey, randomBytes32, new Transaction(0, Seq.empty, Seq.empty, 0), 42 sat, "mutual")
       val pp5a = PaymentSent.PartialPayment(UUID.randomUUID(), 42000 msat, 1000 msat, randomBytes32, None, timestamp = 0)
       val pp5b = PaymentSent.PartialPayment(UUID.randomUUID(), 42100 msat, 900 msat, randomBytes32, None, timestamp = 1)
       val e5 = PaymentSent(UUID.randomUUID(), randomBytes32, randomBytes32, 84100 msat, randomKey.publicKey, pp5a :: pp5b :: Nil)
@@ -112,10 +113,10 @@ class SqliteAuditDbSpec extends AnyFunSuite {
       db.add(TrampolinePaymentRelayed(randomBytes32, Seq(PaymentRelayed.Part(25000 msat, c6)), Seq(PaymentRelayed.Part(20000 msat, c4))))
       db.add(TrampolinePaymentRelayed(randomBytes32, Seq(PaymentRelayed.Part(46000 msat, c6)), Seq(PaymentRelayed.Part(16000 msat, c2), PaymentRelayed.Part(10000 msat, c4), PaymentRelayed.Part(14000 msat, c4))))
 
-      db.add(NetworkFeePaid(null, n2, c2, Transaction(0, Seq.empty, Seq.empty, 0), 200 sat, "funding"))
-      db.add(NetworkFeePaid(null, n2, c2, Transaction(0, Seq.empty, Seq.empty, 0), 300 sat, "mutual"))
-      db.add(NetworkFeePaid(null, n3, c3, Transaction(0, Seq.empty, Seq.empty, 0), 400 sat, "funding"))
-      db.add(NetworkFeePaid(null, n4, c4, Transaction(0, Seq.empty, Seq.empty, 0), 500 sat, "funding"))
+    db.add(NetworkFeePaid(null, n2, c2, new Transaction(0, Seq.empty[TxIn], Seq.empty[TxOut], 0), 200 sat, "funding"))
+    db.add(NetworkFeePaid(null, n2, c2, new Transaction(0, Seq.empty[TxIn], Seq.empty[TxOut], 0), 300 sat, "mutual"))
+    db.add(NetworkFeePaid(null, n3, c3, new Transaction(0, Seq.empty[TxIn], Seq.empty[TxOut], 0), 400 sat, "funding"))
+    db.add(NetworkFeePaid(null, n4, c4, new Transaction(0, Seq.empty[TxIn], Seq.empty[TxOut], 0), 500 sat, "funding"))
 
       // NB: we only count a relay fee for the outgoing channel, no the incoming one.
       assert(db.stats(0, System.currentTimeMillis + 1).toSet === Set(
@@ -146,7 +147,7 @@ class SqliteAuditDbSpec extends AnyFunSuite {
       // Fund channels.
       channelIds.foreach(channelId => {
         val nodeId = nodeIds(Random.nextInt(nodeCount))
-        db.add(NetworkFeePaid(null, nodeId, channelId, Transaction(0, Seq.empty, Seq.empty, 0), 100 sat, "funding"))
+        db.add(NetworkFeePaid(null, nodeId, channelId, new Transaction(0, Seq.empty, Seq.empty, 0), 100 sat, "funding"))
       })
       // Add relay events.
       (1 to eventCount).foreach(_ => {
@@ -198,10 +199,10 @@ class SqliteAuditDbSpec extends AnyFunSuite {
           assert(getVersion(statement, "audit", 4) == 1) // we expect version 1
         }
 
-        val ps = PaymentSent(UUID.randomUUID(), randomBytes32, randomBytes32, 42000 msat, PrivateKey(ByteVector32.One).publicKey, PaymentSent.PartialPayment(UUID.randomUUID(), 42000 msat, 1000 msat, randomBytes32, None) :: Nil)
+        val ps = PaymentSent(UUID.randomUUID(), randomBytes32, randomBytes32, 42000 msat, new PrivateKey(ByteVector32.One).publicKey, PaymentSent.PartialPayment(UUID.randomUUID(), 42000 msat, 1000 msat, randomBytes32, None) :: Nil)
         val pp1 = PaymentSent.PartialPayment(UUID.randomUUID(), 42001 msat, 1001 msat, randomBytes32, None)
         val pp2 = PaymentSent.PartialPayment(UUID.randomUUID(), 42002 msat, 1002 msat, randomBytes32, None)
-        val ps1 = PaymentSent(UUID.randomUUID(), randomBytes32, randomBytes32, 84003 msat, PrivateKey(ByteVector32.One).publicKey, pp1 :: pp2 :: Nil)
+        val ps1 = PaymentSent(UUID.randomUUID(), randomBytes32, randomBytes32, 84003 msat, new PrivateKey(ByteVector32.One).publicKey, pp1 :: pp2 :: Nil)
         val e1 = ChannelErrorOccurred(null, randomBytes32, randomKey.publicKey, null, LocalError(new RuntimeException("oops")), isFatal = true)
         val e2 = ChannelErrorOccurred(null, randomBytes32, randomKey.publicKey, null, RemoteError(wire.Error(randomBytes32, "remote oops")), isFatal = true)
 
@@ -209,9 +210,9 @@ class SqliteAuditDbSpec extends AnyFunSuite {
         using(connection.prepareStatement("INSERT INTO sent VALUES (?, ?, ?, ?, ?, ?)")) { statement =>
           statement.setLong(1, ps.recipientAmount.toLong)
           statement.setLong(2, ps.feesPaid.toLong)
-          statement.setBytes(3, ps.paymentHash.toArray)
-          statement.setBytes(4, ps.paymentPreimage.toArray)
-          statement.setBytes(5, ps.parts.head.toChannelId.toArray)
+          statement.setBytes(3, ps.paymentHash.toByteArray)
+          statement.setBytes(4, ps.paymentPreimage.toByteArray)
+          statement.setBytes(5, ps.parts.head.toChannelId.toByteArray)
           statement.setLong(6, ps.timestamp)
           statement.executeUpdate()
         }
@@ -324,15 +325,15 @@ class SqliteAuditDbSpec extends AnyFunSuite {
 
         val pp1 = PaymentSent.PartialPayment(UUID.randomUUID(), 500 msat, 10 msat, randomBytes32, None, 100)
         val pp2 = PaymentSent.PartialPayment(UUID.randomUUID(), 600 msat, 5 msat, randomBytes32, None, 110)
-        val ps1 = PaymentSent(UUID.randomUUID(), randomBytes32, randomBytes32, 1100 msat, PrivateKey(ByteVector32.One).publicKey, pp1 :: pp2 :: Nil)
+        val ps1 = PaymentSent(UUID.randomUUID(), randomBytes32, randomBytes32, 1100 msat, new PrivateKey(ByteVector32.One).publicKey, pp1 :: pp2 :: Nil)
 
         for (pp <- Seq(pp1, pp2)) {
           using(connection.prepareStatement("INSERT INTO sent (amount_msat, fees_msat, payment_hash, payment_preimage, to_channel_id, timestamp, id) VALUES (?, ?, ?, ?, ?, ?, ?)")) { statement =>
             statement.setLong(1, pp.amount.toLong)
             statement.setLong(2, pp.feesPaid.toLong)
-            statement.setBytes(3, ps1.paymentHash.toArray)
-            statement.setBytes(4, ps1.paymentPreimage.toArray)
-            statement.setBytes(5, pp.toChannelId.toArray)
+            statement.setBytes(3, ps1.paymentHash.toByteArray)
+            statement.setBytes(4, ps1.paymentPreimage.toByteArray)
+            statement.setBytes(5, pp.toChannelId.toByteArray)
             statement.setLong(6, pp.timestamp)
             statement.setBytes(7, pp.id.toString.getBytes)
             statement.executeUpdate()
@@ -346,9 +347,9 @@ class SqliteAuditDbSpec extends AnyFunSuite {
           using(connection.prepareStatement("INSERT INTO relayed (amount_in_msat, amount_out_msat, payment_hash, from_channel_id, to_channel_id, timestamp) VALUES (?, ?, ?, ?, ?, ?)")) { statement =>
             statement.setLong(1, relayed.amountIn.toLong)
             statement.setLong(2, relayed.amountOut.toLong)
-            statement.setBytes(3, relayed.paymentHash.toArray)
-            statement.setBytes(4, relayed.fromChannelId.toArray)
-            statement.setBytes(5, relayed.toChannelId.toArray)
+            statement.setBytes(3, relayed.paymentHash.toByteArray)
+            statement.setBytes(4, relayed.fromChannelId.toByteArray)
+            statement.setBytes(5, relayed.toChannelId.toByteArray)
             statement.setLong(6, relayed.timestamp)
             statement.executeUpdate()
           }
@@ -391,9 +392,9 @@ class SqliteAuditDbSpec extends AnyFunSuite {
       val isPg = dbs.isInstanceOf[TestPgDatabases]
 
       using(sqlite.prepareStatement("INSERT INTO relayed (payment_hash, amount_msat, channel_id, direction, relay_type, timestamp) VALUES (?, ?, ?, ?, ?, ?)")) { statement =>
-        if (isPg) statement.setString(1, randomBytes32.toHex) else statement.setBytes(1, randomBytes32.toArray)
+        if (isPg) statement.setString(1, randomBytes32.toHex) else statement.setBytes(1, randomBytes32.toByteArray)
         statement.setLong(2, 42)
-        if (isPg) statement.setString(3, randomBytes32.toHex) else statement.setBytes(3, randomBytes32.toArray)
+        if (isPg) statement.setString(3, randomBytes32.toHex) else statement.setBytes(3, randomBytes32.toByteArray)
         statement.setString(4, "IN")
         statement.setString(5, "unknown") // invalid relay type
         statement.setLong(6, 10)
@@ -401,9 +402,9 @@ class SqliteAuditDbSpec extends AnyFunSuite {
       }
 
       using(sqlite.prepareStatement("INSERT INTO relayed (payment_hash, amount_msat, channel_id, direction, relay_type, timestamp) VALUES (?, ?, ?, ?, ?, ?)")) { statement =>
-        if (isPg) statement.setString(1, randomBytes32.toHex) else statement.setBytes(1, randomBytes32.toArray)
+        if (isPg) statement.setString(1, randomBytes32.toHex) else statement.setBytes(1, randomBytes32.toByteArray)
         statement.setLong(2, 51)
-        if (isPg) statement.setString(3, randomBytes32.toHex) else statement.setBytes(3, randomBytes32.toArray)
+        if (isPg) statement.setString(3, randomBytes32.toHex) else statement.setBytes(3, randomBytes32.toByteArray)
         statement.setString(4, "UP") // invalid direction
         statement.setString(5, "channel")
         statement.setLong(6, 20)
@@ -414,9 +415,9 @@ class SqliteAuditDbSpec extends AnyFunSuite {
       val channelId = randomBytes32
 
       using(sqlite.prepareStatement("INSERT INTO relayed (payment_hash, amount_msat, channel_id, direction, relay_type, timestamp) VALUES (?, ?, ?, ?, ?, ?)")) { statement =>
-        if (isPg) statement.setString(1, paymentHash.toHex) else statement.setBytes(1, paymentHash.toArray)
+        if (isPg) statement.setString(1, paymentHash.toHex) else statement.setBytes(1, paymentHash.toByteArray)
         statement.setLong(2, 65)
-        if (isPg) statement.setString(3, channelId.toHex) else statement.setBytes(3, channelId.toArray)
+        if (isPg) statement.setString(3, channelId.toHex) else statement.setBytes(3, channelId.toByteArray)
         statement.setString(4, "IN") // missing a corresponding OUT
         statement.setString(5, "channel")
         statement.setLong(6, 30)

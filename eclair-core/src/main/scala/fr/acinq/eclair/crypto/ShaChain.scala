@@ -29,7 +29,16 @@ object ShaChain {
 
   case class Node(value: ByteVector32, height: Int, parent: Option[Node])
 
-  def flip(in: ByteVector32, index: Int): ByteVector32 = ByteVector32(in.update(index / 8, (in(index / 8) ^ (1 << index % 8)).toByte))
+  object Node {
+    def apply(value: Array[Byte], height: Int, parent: Option[Node]) : Node = new Node(new ByteVector32(value), height, parent)
+  }
+
+  //def flip(in: ByteVector32, index: Int): ByteVector32 = ByteVector32(in.update(index / 8, (in(index / 8) ^ (1 << index % 8)).toByte))
+
+  def flip(in: ByteVector32, index: Int): ByteVector32 = {
+    val output = in.update(index / 8, (in.get(index / 8) ^ (1 << index % 8)).toByte)
+    output
+  }
 
   /**
     *
@@ -49,7 +58,9 @@ object ShaChain {
     case true => Node(Crypto.sha256(flip(node.value, 63 - node.height)), node.height + 1, Some(node))
   }
 
-  def derive(node: Node, directions: Seq[Boolean]): Node = directions.foldLeft(node)(derive)
+  def derive(node: Node, directions: Seq[Boolean]): Node = {
+    directions.foldLeft(node)(derive)
+  }
 
   def derive(node: Node, directions: Long): Node = derive(node, moves(directions))
 

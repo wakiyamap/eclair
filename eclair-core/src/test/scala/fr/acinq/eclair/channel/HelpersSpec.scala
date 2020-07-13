@@ -25,6 +25,8 @@ import org.scalatest.funsuite.AnyFunSuite
 
 import scala.compat.Platform
 import scala.concurrent.duration._
+import fr.acinq.eclair.KotlinUtils._
+
 
 class HelpersSpec extends AnyFunSuite {
 

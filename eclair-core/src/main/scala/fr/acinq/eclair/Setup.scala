@@ -155,8 +155,8 @@ class Setup(datadir: File,
         ibd = (json \ "initialblockdownload").extract[Boolean]
         blocks = (json \ "blocks").extract[Long]
         headers = (json \ "headers").extract[Long]
-        chainHash <- bitcoinClient.invoke("getblockhash", 0).map(_.extract[String]).map(s => ByteVector32.fromValidHex(s)).map(_.reverse)
-        bitcoinVersion <- bitcoinClient.invoke("getnetworkinfo").map(json => json \ "version").map(_.extract[Int])
+        chainHash <- bitcoinClient.invoke("getblockhash", 0).map(_.extract[String]).map(s => ByteVector32.fromValidHex(s)).map(_.reversed())
+        bitcoinVersion <- bitcoinClient.invoke("getnetworkinfo").map(json => (json \ "version")).map(_.extract[Int])
         unspentAddresses <- bitcoinClient.invoke("listunspent").collect { case JArray(values) =>
           values
             .filter(value => (value \ "spendable").extract[Boolean])
@@ -193,11 +193,17 @@ class Setup(datadir: File,
           logger.info(s"override electrum default with server=$address ssl=$ssl")
           Set(ElectrumServerAddress(address, ssl))
         case false =>
-          val (addressesFile, sslEnabled) = (nodeParams.chainHash: @unchecked) match {
-            case Block.RegtestGenesisBlock.hash => ("/electrum/servers_regtest.json", false) // in regtest we connect in plaintext
-            case Block.TestnetGenesisBlock.hash => ("/electrum/servers_testnet.json", true)
-            case Block.LivenetGenesisBlock.hash => ("/electrum/servers_mainnet.json", true)
-          }
+//          val (addressesFile, sslEnabled) = nodeParams.chainHash match {
+//            case Block.RegtestGenesisBlock.getHash => ("/electrum/servers_regtest.json", false) // in regtest we connect in plaintext
+//            case Block.TestnetGenesisBlock.getHash => ("/electrum/servers_testnet.json", true)
+//            case Block.LivenetGenesisBlock.getHash => ("/electrum/servers_mainnet.json", true)
+//          }
+          val (addressesFile: String, sslEnabled: Boolean) =
+            if (nodeParams.chainHash ==  Block.RegtestGenesisBlock.hash) ("/electrum/servers_regtest.json", false) // in regtest we connect in plaintext
+            else if (nodeParams.chainHash == Block.TestnetGenesisBlock.hash) ("/electrum/servers_testnet.json", true)
+            else if (nodeParams.chainHash == Block.LivenetGenesisBlock.hash) ("/electrum/servers_mainnet.json", true)
+
+
           val stream = classOf[Setup].getResourceAsStream(addressesFile)
           ElectrumClientPool.readServerAddresses(stream, sslEnabled)
       }
@@ -232,13 +238,12 @@ class Setup(datadir: File,
       minFeeratePerByte = config.getLong("min-feerate")
       smoothFeerateWindow = config.getInt("smooth-feerate-window")
       readTimeout = FiniteDuration(config.getDuration("feerate-provider-timeout", TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS)
-      feeProvider = (nodeParams.chainHash, bitcoin) match {
-        case (Block.RegtestGenesisBlock.hash, _) =>
-          new FallbackFeeProvider(new ConstantFeeProvider(defaultFeerates) :: Nil, minFeeratePerByte)
-        case (_, Bitcoind(bitcoinClient)) =>
-          new FallbackFeeProvider(new SmoothFeeProvider(new BitcoinCoreFeeProvider(bitcoinClient, defaultFeerates), smoothFeerateWindow) :: new SmoothFeeProvider(new BitgoFeeProvider(nodeParams.chainHash, readTimeout), smoothFeerateWindow) :: new SmoothFeeProvider(new EarnDotComFeeProvider(readTimeout), smoothFeerateWindow) :: Nil, minFeeratePerByte) // order matters!
-        case _ =>
-          new FallbackFeeProvider(new SmoothFeeProvider(new BitgoFeeProvider(nodeParams.chainHash, readTimeout), smoothFeerateWindow) :: new SmoothFeeProvider(new EarnDotComFeeProvider(readTimeout), smoothFeerateWindow) :: Nil, minFeeratePerByte) // order matters!
+      feeProvider: FeeProvider = if (nodeParams.chainHash == Block.RegtestGenesisBlock.hash) new FallbackFeeProvider(new ConstantFeeProvider(defaultFeerates) :: Nil, minFeeratePerByte)
+      else {
+        bitcoin match {
+          case Bitcoind(bitcoinClient) => new FallbackFeeProvider(new SmoothFeeProvider(new BitcoinCoreFeeProvider(bitcoinClient, defaultFeerates), smoothFeerateWindow) :: new SmoothFeeProvider(new BitgoFeeProvider(nodeParams.chainHash, readTimeout), smoothFeerateWindow) :: new SmoothFeeProvider(new EarnDotComFeeProvider(readTimeout), smoothFeerateWindow) :: new ConstantFeeProvider(defaultFeerates) :: Nil, minFeeratePerByte) // order matters!
+          case _ =>  new FallbackFeeProvider(new SmoothFeeProvider(new BitgoFeeProvider(nodeParams.chainHash, readTimeout), smoothFeerateWindow) :: new SmoothFeeProvider(new EarnDotComFeeProvider(readTimeout), smoothFeerateWindow) :: new ConstantFeeProvider(defaultFeerates) :: Nil, minFeeratePerByte) // order matters!
+        }
       }
       _ = system.scheduler.schedule(0 seconds, 10 minutes)(feeProvider.getFeerates.onComplete {
         case Success(feerates) =>

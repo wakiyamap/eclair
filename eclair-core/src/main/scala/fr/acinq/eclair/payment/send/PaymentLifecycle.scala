@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
 import akka.actor.{ActorRef, FSM, Props, Status}
 import akka.event.Logging.MDC
 import fr.acinq.bitcoin.ByteVector32
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.PublicKey
 import fr.acinq.eclair._
 import fr.acinq.eclair.channel.{CMD_ADD_HTLC, ChannelCommandResponse, HtlcsTimedoutDownstream, Register}
 import fr.acinq.eclair.crypto.{Sphinx, TransportHandler}

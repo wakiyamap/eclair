@@ -30,6 +30,8 @@ import org.scalatest.Outcome
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
 
 import scala.concurrent.duration._
+import fr.acinq.eclair.KotlinUtils._
+
 
 /**
  * Created by PM on 05/07/2016.
@@ -85,8 +87,8 @@ class WaitForFundingConfirmedStateSpec extends TestKitBaseClass with FixtureAnyF
   test("recv BITCOIN_FUNDING_DEPTHOK (bad funding pubkey script)") { f =>
     import f._
     val fundingTx = alice.stateData.asInstanceOf[DATA_WAIT_FOR_FUNDING_CONFIRMED].fundingTx.get
-    val badOutputScript = fundingTx.txOut.head.copy(publicKeyScript = Script.write(multiSig2of2(randomKey.publicKey, randomKey.publicKey)))
-    val badFundingTx = fundingTx.copy(txOut = Seq(badOutputScript))
+    val badOutputScript = fundingTx.txOut.head.updatePublicKeyScript(multiSig2of2(randomKey.publicKey, randomKey.publicKey))
+    val badFundingTx = fundingTx.updateOutputs(Seq(badOutputScript))
     alice ! WatchEventConfirmed(BITCOIN_FUNDING_DEPTHOK, 42000, 42, badFundingTx)
     awaitCond(alice.stateName == CLOSED)
   }
@@ -94,8 +96,8 @@ class WaitForFundingConfirmedStateSpec extends TestKitBaseClass with FixtureAnyF
   test("recv BITCOIN_FUNDING_DEPTHOK (bad funding amount)") { f =>
     import f._
     val fundingTx = alice.stateData.asInstanceOf[DATA_WAIT_FOR_FUNDING_CONFIRMED].fundingTx.get
-    val badOutputAmount = fundingTx.txOut.head.copy(amount = 1234567.sat)
-    val badFundingTx = fundingTx.copy(txOut = Seq(badOutputAmount))
+    val badOutputAmount = fundingTx.txOut.head.updateAmount(1234567.sat)
+    val badFundingTx = fundingTx.updateOutputs(Seq(badOutputAmount))
     alice ! WatchEventConfirmed(BITCOIN_FUNDING_DEPTHOK, 42000, 42, badFundingTx)
     awaitCond(alice.stateName == CLOSED)
   }
@@ -127,7 +129,7 @@ class WaitForFundingConfirmedStateSpec extends TestKitBaseClass with FixtureAnyF
   test("recv BITCOIN_FUNDING_SPENT (other commit)") { f =>
     import f._
     val tx = alice.stateData.asInstanceOf[DATA_WAIT_FOR_FUNDING_CONFIRMED].commitments.localCommit.publishableTxs.commitTx.tx
-    alice ! WatchEventSpent(BITCOIN_FUNDING_SPENT, Transaction(0, Nil, Nil, 0))
+    alice ! WatchEventSpent(BITCOIN_FUNDING_SPENT, new Transaction(0, Nil, Nil, 0))
     alice2bob.expectMsgType[Error]
     alice2blockchain.expectMsg(PublishAsap(tx))
     awaitCond(alice.stateName == ERR_INFORMATION_LEAK)

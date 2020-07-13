@@ -16,8 +16,7 @@
 
 package fr.acinq.eclair.router
 
-import fr.acinq.bitcoin.Crypto.PublicKey
-import fr.acinq.bitcoin.{Btc, MilliBtc, Satoshi}
+import fr.acinq.bitcoin.{Btc, MilliBtc, PublicKey, Satoshi}
 import fr.acinq.eclair._
 import fr.acinq.eclair.router.Graph.GraphStructure.{DirectedGraph, GraphEdge}
 import fr.acinq.eclair.router.Router._
@@ -26,6 +25,7 @@ import fr.acinq.eclair.wire.ChannelUpdate
 import scala.annotation.tailrec
 import scala.collection.immutable.SortedMap
 import scala.collection.mutable
+import KotlinUtils._
 
 object Graph {
 
@@ -278,7 +278,7 @@ object Graph {
       val ageFactor = normalize(channelBlockHeight, min = currentBlockHeight - BLOCK_TIME_TWO_MONTHS, max = currentBlockHeight)
 
       // Every edge is weighted by channel capacity, larger channels add less weight
-      val edgeMaxCapacity = edge.capacity.toMilliSatoshi
+      val edgeMaxCapacity = MilliSatoshi(edge.capacity)
       val capFactor = 1 - normalize(edgeMaxCapacity.toLong, CAPACITY_CHANNEL_LOW.toLong, CAPACITY_CHANNEL_HIGH.toLong)
 
       // Every edge is weighted by its cltv-delta value, normalized
@@ -571,7 +571,7 @@ object Graph {
         if (capacity > 0.sat) {
           capacity
         } else {
-          update.htlcMaximumMsat.map(_.truncateToSatoshi + 1.sat).getOrElse(RoutingHeuristics.CAPACITY_CHANNEL_HIGH.truncateToSatoshi)
+          update.htlcMaximumMsat.map(_.truncateToSatoshi plus 1.sat).getOrElse(RoutingHeuristics.CAPACITY_CHANNEL_HIGH.truncateToSatoshi)
         }
       }
     }

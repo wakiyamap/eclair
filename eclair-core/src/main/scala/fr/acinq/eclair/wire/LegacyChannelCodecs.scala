@@ -19,21 +19,25 @@ package fr.acinq.eclair.wire
 import java.util.UUID
 
 import akka.actor.ActorRef
-import fr.acinq.bitcoin.DeterministicWallet.{ExtendedPrivateKey, KeyPath}
+import fr.acinq.bitcoin.KeyPath
+import fr.acinq.bitcoin.DeterministicWallet.ExtendedPrivateKey
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, OutPoint, Transaction, TxOut}
 import fr.acinq.eclair.channel._
 import fr.acinq.eclair.crypto.ShaChain
 import fr.acinq.eclair.payment.relay.Origin
 import fr.acinq.eclair.transactions.Transactions._
 import fr.acinq.eclair.transactions._
+import fr.acinq.eclair.wire.ChannelCodecs.lengthDelimited
 import fr.acinq.eclair.wire.CommonCodecs._
 import fr.acinq.eclair.wire.LightningMessageCodecs._
 import grizzled.slf4j.Logging
-import scodec.bits.BitVector
+import scodec.bits.{BitVector, ByteVector}
 import scodec.codecs._
 import scodec.{Attempt, Codec}
+import shapeless.{::, HNil}
 
 import scala.concurrent.duration._
+import scala.collection.JavaConverters._
 
 /**
  * Those codecs are here solely for backward compatibility reasons.
@@ -42,14 +46,22 @@ import scala.concurrent.duration._
  */
 private[wire] object LegacyChannelCodecs extends Logging {
 
-  val keyPathCodec: Codec[KeyPath] = ("path" | listOfN(uint16, uint32)).xmap[KeyPath](l => new KeyPath(l), keyPath => keyPath.path.toList).as[KeyPath].decodeOnly
+  val keyPathCodec: Codec[KeyPath] = ("path" | listOfN(uint16, uint32)).xmap[KeyPath](l => {
+    val l1: java.util.List[java.lang.Long] = l.map(_.asInstanceOf[java.lang.Long]).asJava
+    new KeyPath(l1)
+  }, keyPath => {
+    keyPath.path.asScala.toList.map(_.toLong)
+  }).as[KeyPath]
 
   val extendedPrivateKeyCodec: Codec[ExtendedPrivateKey] = (
     ("secretkeybytes" | bytes32) ::
       ("chaincode" | bytes32) ::
       ("depth" | uint16) ::
       ("path" | keyPathCodec) ::
-      ("parent" | int64)).as[ExtendedPrivateKey].decodeOnly
+      ("parent" | int64)).xmap(
+    { case a :: b :: c :: d :: e :: HNil => new ExtendedPrivateKey(a, b, c, d, e) },
+    { exp => exp.secretkeybytes :: exp.chaincode :: exp.depth :: exp.path :: exp.parent :: HNil }
+  )
 
   val channelVersionCodec: Codec[ChannelVersion] = discriminatorWithDefault[ChannelVersion](
     discriminator = discriminated[ChannelVersion].by(byte)
@@ -104,16 +116,19 @@ private[wire] object LegacyChannelCodecs extends Logging {
       ("toLocal" | millisatoshi) ::
       ("toRemote" | millisatoshi)).as[CommitmentSpec].decodeOnly
 
-  val outPointCodec: Codec[OutPoint] = variableSizeBytes(uint16, bytes.xmap(d => OutPoint.read(d.toArray), d => OutPoint.write(d)))
+  val outPointCodec: Codec[OutPoint] = variableSizeBytes(uint16, bytes.xmap(d => OutPoint.read(d.toArray), d => ByteVector.view(OutPoint.write(d))))
 
-  val txOutCodec: Codec[TxOut] = variableSizeBytes(uint16, bytes.xmap(d => TxOut.read(d.toArray), d => TxOut.write(d)))
+  val txOutCodec: Codec[TxOut] = variableSizeBytes(uint16, bytes.xmap(d => TxOut.read(d.toArray), d => ByteVector.view(TxOut.write(d))))
 
-  val txCodec: Codec[Transaction] = variableSizeBytes(uint16, bytes.xmap(d => Transaction.read(d.toArray), d => Transaction.write(d)))
+  val txCodec: Codec[Transaction] = variableSizeBytes(uint16, bytes.xmap(d => Transaction.read(d.toArray), d => ByteVector.view(Transaction.write(d))))
 
   val inputInfoCodec: Codec[InputInfo] = (
     ("outPoint" | outPointCodec) ::
       ("txOut" | txOutCodec) ::
-      ("redeemScript" | varsizebinarydata)).as[InputInfo].decodeOnly
+      ("redeemScript" | varsizebinarydata)).xmap(
+    { case a :: b :: c :: HNil => InputInfo(a, b, c.toArray)},
+    { i => i.outPoint :: i.txOut :: ByteVector.view(i.redeemScript.toByteArray) :: HNil }
+  )
 
   val txWithInputInfoCodec: Codec[TransactionWithInputInfo] = discriminated[TransactionWithInputInfo].by(uint16)
     .typecase(0x01, (("inputInfo" | inputInfoCodec) :: ("tx" | txCodec)).as[CommitTx])
@@ -131,8 +146,8 @@ private[wire] object LegacyChannelCodecs extends Logging {
   val sig64OrDERCodec: Codec[ByteVector64] = Codec[ByteVector64](
     (value: ByteVector64) => bytes(64).encode(value),
     (wire: BitVector) => bytes.decode(wire).map(_.map {
-      case bin64 if bin64.size == 64 => ByteVector64(bin64)
-      case der => Crypto.der2compact(der)
+      case bin64 if bin64.size == 64 => new ByteVector64(bin64.toArray)
+      case der => Crypto.der2compact(der.toArray)
     })
   )
 

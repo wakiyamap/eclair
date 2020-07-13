@@ -21,7 +21,7 @@ import java.util.UUID
 import akka.actor.Status
 import akka.actor.Status.Failure
 import akka.testkit.TestProbe
-import fr.acinq.bitcoin.Crypto.PrivateKey
+import fr.acinq.bitcoin.PrivateKey
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, ScriptFlags, Transaction}
 import fr.acinq.eclair.Features.StaticRemoteKey
 import fr.acinq.eclair.TestConstants.{Alice, Bob, TestFeeEstimator}
@@ -46,6 +46,8 @@ import org.scalatest.{Outcome, Tag}
 import scodec.bits._
 
 import scala.concurrent.duration._
+import fr.acinq.eclair.KotlinUtils._
+
 
 /**
  * Created by PM on 05/07/2016.
@@ -581,14 +583,14 @@ class NormalStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with 
     assert(Alice.nodeParams.dustLimit > Bob.nodeParams.dustLimit)
     // we're gonna exchange two htlcs in each direction, the goal is to have bob's commitment have 4 htlcs, and alice's
     // commitment only have 3. We will then check that alice indeed persisted 4 htlcs, and bob only 3.
-    val aliceMinReceive = Alice.nodeParams.dustLimit + weight2fee(TestConstants.feeratePerKw, htlcSuccessWeight)
-    val aliceMinOffer = Alice.nodeParams.dustLimit + weight2fee(TestConstants.feeratePerKw, htlcTimeoutWeight)
-    val bobMinReceive = Bob.nodeParams.dustLimit + weight2fee(TestConstants.feeratePerKw, htlcSuccessWeight)
-    val bobMinOffer = Bob.nodeParams.dustLimit + weight2fee(TestConstants.feeratePerKw, htlcTimeoutWeight)
-    val a2b_1 = bobMinReceive + 10.sat // will be in alice and bob tx
-    val a2b_2 = bobMinReceive + 20.sat // will be in alice and bob tx
-    val b2a_1 = aliceMinReceive + 10.sat // will be in alice and bob tx
-    val b2a_2 = bobMinOffer + 10.sat // will be only be in bob tx
+    val aliceMinReceive = Alice.nodeParams.dustLimit plus weight2fee(TestConstants.feeratePerKw, htlcSuccessWeight)
+    val aliceMinOffer = Alice.nodeParams.dustLimit plus weight2fee(TestConstants.feeratePerKw, htlcTimeoutWeight)
+    val bobMinReceive = Bob.nodeParams.dustLimit plus weight2fee(TestConstants.feeratePerKw, htlcSuccessWeight)
+    val bobMinOffer = Bob.nodeParams.dustLimit plus weight2fee(TestConstants.feeratePerKw, htlcTimeoutWeight)
+    val a2b_1 = bobMinReceive plus 10.sat // will be in alice and bob tx
+    val a2b_2 = bobMinReceive plus 20.sat // will be in alice and bob tx
+    val b2a_1 = aliceMinReceive plus 10.sat // will be in alice and bob tx
+    val b2a_2 = bobMinOffer plus 10.sat // will be only be in bob tx
     assert(a2b_1 > aliceMinOffer && a2b_1 > bobMinReceive)
     assert(a2b_2 > aliceMinOffer && a2b_2 > bobMinReceive)
     assert(b2a_1 > aliceMinReceive && b2a_1 > bobMinOffer)
@@ -833,7 +835,7 @@ class NormalStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with 
     import f._
     val sender = TestProbe()
     val r = randomBytes32
-    val h = Crypto.sha256(r)
+    val h = new ByteVector32(Crypto.sha256(r))
 
     sender.send(alice, CMD_ADD_HTLC(50000000 msat, h, CltvExpiryDelta(144).toCltvExpiry(currentBlockHeight), TestConstants.emptyOnionPacket, Upstream.Local(UUID.randomUUID())))
     sender.expectMsg(ChannelCommandResponse.Ok)
@@ -1045,7 +1047,7 @@ class NormalStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with 
 
     // actual test begins
     bob2alice.expectMsgType[RevokeAndAck]
-    sender.send(alice, RevokeAndAck(ByteVector32.Zeroes, PrivateKey(randomBytes32), PrivateKey(randomBytes32).publicKey))
+    sender.send(alice, RevokeAndAck(ByteVector32.Zeroes, new PrivateKey(randomBytes32), new PrivateKey(randomBytes32).publicKey))
     alice2bob.expectMsgType[Error]
     awaitCond(alice.stateName == CLOSING)
     // channel should be advertised as down
@@ -1060,7 +1062,7 @@ class NormalStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with 
     val tx = alice.stateData.asInstanceOf[DATA_NORMAL].commitments.localCommit.publishableTxs.commitTx.tx
     val sender = TestProbe()
     awaitCond(alice.stateData.asInstanceOf[DATA_NORMAL].commitments.remoteNextCommitInfo.isRight)
-    sender.send(alice, RevokeAndAck(ByteVector32.Zeroes, PrivateKey(randomBytes32), PrivateKey(randomBytes32).publicKey))
+    sender.send(alice, RevokeAndAck(ByteVector32.Zeroes, new PrivateKey(randomBytes32), new PrivateKey(randomBytes32).publicKey))
     alice2bob.expectMsgType[Error]
     awaitCond(alice.stateName == CLOSING)
     // channel should be advertised as down
@@ -1352,7 +1354,7 @@ class NormalStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with 
   test("recv CMD_FAIL_HTLC (unknown htlc id)") { f =>
     import f._
     val sender = TestProbe()
-    val r: ByteVector = randomBytes32
+    //val r: ByteVector = randomBytes32
     val initialState = bob.stateData.asInstanceOf[DATA_NORMAL]
 
     sender.send(bob, CMD_FAIL_HTLC(42, Right(PermanentChannelFailure)))
@@ -2121,7 +2123,7 @@ class NormalStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with 
     val amountClaimed = (for (claimHtlcTx <- claimTxes) yield {
       assert(claimHtlcTx.txIn.size == 1)
       assert(claimHtlcTx.txOut.size == 1)
-      Transaction.correctlySpends(claimHtlcTx, bobCommitTx :: Nil, ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
+      Transaction.correctlySpends(claimHtlcTx, bobCommitTx, ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
       claimHtlcTx.txOut(0).amount
     }).sum
     // at best we have a little less than 450 000 + 250 000 + 100 000 + 50 000 = 850 000 (because fees)
@@ -2142,7 +2144,7 @@ class NormalStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with 
     // assert the feerate of the claim main is what we expect
     val expectedFeeRate = alice.feeEstimator.getFeeratePerKw(alice.feeTargets.claimMainBlockTarget)
     val expectedFee = Transactions.weight2fee(expectedFeeRate, Transactions.claimP2WPKHOutputWeight)
-    val claimFee = claimMain.txIn.map(in => bobCommitTx.txOut(in.outPoint.index.toInt).amount).sum - claimMain.txOut.map(_.amount).sum
+    val claimFee = claimMain.txIn.map(in => bobCommitTx.txOut(in.outPoint.index.toInt).amount).sum minus claimMain.txOut.map(_.amount).sum
     assert(claimFee == expectedFee)
   }
 
@@ -2189,7 +2191,7 @@ class NormalStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with 
     val amountClaimed = (for (claimHtlcTx <- claimTxes) yield {
       assert(claimHtlcTx.txIn.size == 1)
       assert(claimHtlcTx.txOut.size == 1)
-      Transaction.correctlySpends(claimHtlcTx, bobCommitTx :: Nil, ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
+      Transaction.correctlySpends(claimHtlcTx, bobCommitTx, ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
       claimHtlcTx.txOut(0).amount
     }).sum
     // at best we have a little less than 500 000 + 250 000 + 100 000 = 850 000 (because fees)
@@ -2250,7 +2252,7 @@ class NormalStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with 
 
     Transaction.correctlySpends(mainTx, Seq(revokedTx), ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
     Transaction.correctlySpends(mainPenaltyTx, Seq(revokedTx), ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
-    htlcPenaltyTxs.foreach(htlcPenaltyTx => Transaction.correctlySpends(htlcPenaltyTx, Seq(revokedTx), ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS))
+    htlcPenaltyTxs.foreach(htlcPenaltyTx => Transaction.correctlySpends(htlcPenaltyTx, revokedTx, ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS))
 
     // two main outputs are 760 000 and 200 000
     assert(mainTx.txOut(0).amount === 741500.sat)

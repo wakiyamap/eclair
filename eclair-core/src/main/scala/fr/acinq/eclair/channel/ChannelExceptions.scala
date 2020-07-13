@@ -16,7 +16,7 @@
 
 package fr.acinq.eclair.channel
 
-import fr.acinq.bitcoin.Crypto.PrivateKey
+import fr.acinq.bitcoin.PrivateKey
 import fr.acinq.bitcoin.{ByteVector32, Satoshi, Transaction}
 import fr.acinq.eclair.payment.relay.Origin
 import fr.acinq.eclair.wire.{AnnouncementSignatures, ChannelUpdate, Error, UpdateAddHtlc}

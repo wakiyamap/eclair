@@ -37,7 +37,7 @@ class ElectrumClientPoolSpec extends TestKitBaseClass with AnyFunSuiteLike with 
   val probe = TestProbe()
   // this is tx #2690 of block #500000
   val referenceTx = Transaction.read("0200000001983c5b32ced1de5ae97d3ce9b7436f8bb0487d15bf81e5cae97b1e238dc395c6000000006a47304402205957c75766e391350eba2c7b752f0056cb34b353648ecd0992a8a81fc9bcfe980220629c286592842d152cdde71177cd83086619744a533f262473298cacf60193500121021b8b51f74dbf0ac1e766d162c8707b5e8d89fc59da0796f3b4505e7c0fb4cf31feffffff0276bd0101000000001976a914219de672ba773aa0bc2e15cdd9d2e69b734138fa88ac3e692001000000001976a914301706dede031e9fb4b60836e073a4761855f6b188ac09a10700")
-  val scriptHash = Crypto.sha256(referenceTx.txOut(0).publicKeyScript).reverse
+  val scriptHash = new ByteVector32(Crypto.sha256(referenceTx.txOut.get(0).publicKeyScript)).reversed()
   val serverAddresses = {
     val stream = classOf[ElectrumClientSpec].getResourceAsStream("/electrum/servers_mainnet.json")
     val addresses = ElectrumClientPool.readServerAddresses(stream, sslEnabled = false)
@@ -88,7 +88,7 @@ class ElectrumClientPoolSpec extends TestKitBaseClass with AnyFunSuiteLike with 
     assert(response.txid == referenceTx.txid)
     assert(response.block_height == 500000)
     assert(response.pos == 2690)
-    assert(response.root == ByteVector32(hex"1f6231ed3de07345b607ec2a39b2d01bec2fe10dfb7f516ba4958a42691c9531"))
+    assert(response.root == new ByteVector32("1f6231ed3de07345b607ec2a39b2d01bec2fe10dfb7f516ba4958a42691c9531"))
   }
 
   test("header subscription") {
