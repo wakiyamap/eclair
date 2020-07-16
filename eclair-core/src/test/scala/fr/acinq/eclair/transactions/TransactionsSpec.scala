@@ -20,6 +20,7 @@ import java.nio.ByteOrder
 
 import fr.acinq.bitcoin.Crypto.{ripemd160, sha256}
 import fr.acinq.bitcoin.Script.{pay2wpkh, pay2wsh, write}
+import fr.acinq.bitcoin.crypto.Pack
 import fr.acinq.bitcoin.{Btc, BtcSerializer, ByteVector32, Crypto, MilliBtc, PrivateKey, Protocol, Satoshi, Script, Transaction, TxOut}
 import fr.acinq.eclair.channel.Helpers.Funding
 import fr.acinq.eclair.transactions.CommitmentOutput.{InHtlc, OutHtlc}
@@ -218,7 +219,7 @@ class TransactionsSpec extends AnyFunSuite with Logging {
     {
       assert(getCommitTxNumber(commitTx.tx, isFunder = true, localPaymentPriv.publicKey, remotePaymentPriv.publicKey) == commitTxNumber)
       val hash = Crypto.sha256(localPaymentPriv.publicKey.value concat remotePaymentPriv.publicKey.value)
-      val num = BtcSerializer.uint64BE(hash.toList.takeRight(8).toArray) & 0xffffffffffffL
+      val num = Pack.int64BE(hash.toList.takeRight(8).toArray, 0) & 0xffffffffffffL
       val check = ((commitTx.tx.txIn.head.sequence & 0xffffff) << 24) | (commitTx.tx.lockTime & 0xffffff)
       assert((check ^ num) == commitTxNumber)
     }

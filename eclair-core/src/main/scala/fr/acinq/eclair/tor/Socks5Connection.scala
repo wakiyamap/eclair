@@ -21,7 +21,7 @@ import java.net.{Inet4Address, Inet6Address, InetAddress, InetSocketAddress}
 import akka.actor.{Actor, ActorLogging, ActorRef, Props, Terminated}
 import akka.io.Tcp
 import akka.util.ByteString
-import fr.acinq.bitcoin.Hex
+import fr.acinq.secp256k1.Hex
 import fr.acinq.eclair.randomBytes
 import fr.acinq.eclair.tor.Socks5Connection.{Credentials, Socks5Connect}
 import fr.acinq.eclair.wire._

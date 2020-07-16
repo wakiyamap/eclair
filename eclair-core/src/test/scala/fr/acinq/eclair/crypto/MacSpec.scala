@@ -16,7 +16,8 @@
 
 package fr.acinq.eclair.crypto
 
-import fr.acinq.bitcoin.{ByteVector32, Hex}
+import fr.acinq.bitcoin.{ByteVector32}
+import fr.acinq.secp256k1.Hex
 import org.scalatest.funsuite.AnyFunSuite
 import scodec.bits.HexStringSyntax
 

@@ -19,6 +19,7 @@ package fr.acinq.eclair.crypto
 import java.nio.ByteOrder
 import java.util
 
+import fr.acinq.bitcoin.crypto.Pack
 import fr.acinq.bitcoin.{BtcSerializer, ByteVector32, Protocol}
 import fr.acinq.eclair.crypto.ChaCha20Poly1305.{DecryptionError, EncryptionError, InvalidCounter}
 import grizzled.slf4j.Logger
@@ -135,7 +136,7 @@ object ChaCha20Poly1305 extends Logging {
   def encrypt(key: Array[Byte], nonce: Array[Byte], plaintext: Array[Byte], aad: Array[Byte]): (Array[Byte], Array[Byte]) = {
     val polykey = ChaCha20.encrypt(Zeroes, key, nonce, 0)
     val ciphertext = ChaCha20.encrypt(plaintext, key, nonce, 1)
-    val tag = Poly1305.mac(polykey, aad, pad16(aad), ciphertext, pad16(ciphertext), BtcSerializer.writeUInt64(aad.length), BtcSerializer.writeUInt64(ciphertext.length))
+    val tag = Poly1305.mac(polykey, aad, pad16(aad), ciphertext, pad16(ciphertext), Pack.writeInt64LE(aad.length), Pack.writeInt64LE(ciphertext.length))
 
     logger.debug(s"encrypt($key, $nonce, $aad, $plaintext) = ($ciphertext, $tag)")
     if (util.Arrays.equals(nonce, ChaCha20.ZeroNonce)) {
@@ -161,7 +162,7 @@ object ChaCha20Poly1305 extends Logging {
     */
   def decrypt(key: Array[Byte], nonce: Array[Byte], ciphertext: Array[Byte], aad: Array[Byte], mac: Array[Byte]): Array[Byte] = {
     val polykey = ChaCha20.encrypt(Zeroes, key, nonce, 0)
-    val tag = Poly1305.mac(polykey, aad, pad16(aad), ciphertext, pad16(ciphertext), BtcSerializer.writeUInt64(aad.length), BtcSerializer.writeUInt64(ciphertext.length))
+    val tag = Poly1305.mac(polykey, aad, pad16(aad), ciphertext, pad16(ciphertext), Pack.writeInt64LE(aad.length), Pack.writeInt64LE(ciphertext.length))
     if (util.Arrays.compare(tag, mac) != 0) throw InvalidMac()
     val plaintext = ChaCha20.decrypt(ciphertext, key, nonce, 1)
 

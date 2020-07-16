@@ -22,7 +22,7 @@ import akka.actor.ActorRef
 import akka.pattern._
 import akka.util.Timeout
 import fr.acinq.bitcoin._
-import fr.acinq.bitcoin.{ByteVector32, Satoshi}
+import fr.acinq.bitcoin.{ByteVector32, PublicKey, Satoshi}
 import fr.acinq.eclair.TimestampQueryFilters._
 import fr.acinq.eclair.blockchain.OnChainBalance
 import fr.acinq.eclair.blockchain.bitcoind.BitcoinCoreWallet

@@ -17,8 +17,8 @@
 package fr.acinq.eclair.io
 
 import com.google.common.net.HostAndPort
-import fr.acinq.bitcoin.{Hex, PublicKey}
-import scodec.bits.ByteVector
+import fr.acinq.secp256k1.Hex
+import fr.acinq.bitcoin.PublicKey
 
 import scala.util.{Failure, Success, Try}
 

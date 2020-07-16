@@ -23,10 +23,12 @@ import java.util.concurrent.atomic.AtomicLong
 import akka.actor.{ActorRef, Props}
 import akka.testkit.{TestKit, TestProbe}
 import com.whisk.docker.DockerReadyChecker
-import fr.acinq.bitcoin.{Block, Btc, ByteVector32, DeterministicWallet, Hex, MnemonicCode, OutPoint, Satoshi, Script, ScriptFlags, ScriptWitness, SigHash, SigVersion, Transaction, TxIn, TxOut}
+import fr.acinq.bitcoin.{Block, Btc, ByteVector32, DeterministicWallet, MnemonicCode, OutPoint, Satoshi, Script, ScriptFlags, ScriptWitness, SigHash, SigVersion, Transaction, TxIn, TxOut}
+import fr.acinq.secp256k1.Hex
 import fr.acinq.eclair.LongToBtcAmount
 import fr.acinq.eclair.blockchain.bitcoind.BitcoinCoreWallet.{FundTransactionResponse, SignTransactionResponse}
 import fr.acinq.eclair.blockchain.bitcoind.BitcoindService.BitcoinReq
+import fr.acinq.eclair.blockchain.bitcoind.rpc.ExtendedBitcoinClient
 import fr.acinq.eclair.blockchain.bitcoind.{BitcoinCoreWallet, BitcoindService}
 import fr.acinq.eclair.blockchain.electrum.ElectrumClient.{BroadcastTransaction, BroadcastTransactionResponse, SSL}
 import fr.acinq.eclair.blockchain.electrum.ElectrumClientPool.ElectrumServerAddress
@@ -119,14 +121,14 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
     probe.expectMsgType[JValue]
 
     awaitCond({
-      val GetBalanceResponse(confirmed1, unconfirmed1) = getBalance(probe)
+      val GetBalanceResponse(_, unconfirmed1) = getBalance(probe)
       unconfirmed1 == (unconfirmed plus 100000000.sat)
     }, max = 30 seconds, interval = 1 second)
 
     // confirm our tx
     generateBlocks(bitcoincli, 1)
     awaitCond({
-      val GetBalanceResponse(confirmed1, unconfirmed1) = getBalance(probe)
+      val GetBalanceResponse(confirmed1, _) = getBalance(probe)
       confirmed1 == (confirmed plus 100000000.sat)
     }, max = 30 seconds, interval = 1 second)
 
@@ -162,10 +164,11 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
       ),
       0L)
     val btcWallet = new BitcoinCoreWallet(bitcoinrpcclient)
+    val btcClient = new ExtendedBitcoinClient(bitcoinrpcclient)
     val future = for {
-      FundTransactionResponse(tx1, _, _) <- btcWallet.fundTransaction(tx, false, 10000)
+      FundTransactionResponse(tx1, _, _) <- btcWallet.fundTransaction(tx, lockUnspents = false, 10000)
       SignTransactionResponse(tx2, true) <- btcWallet.signTransaction(tx1)
-      txid <- btcWallet.publishTransaction(tx2)
+      txid <- btcClient.publishTransaction(tx2)
     } yield txid
     Await.result(future, 10 seconds)
 
@@ -199,7 +202,7 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
       (unconfirmed1 minus unconfirmed) === 100000000L.sat
     }, max = 30 seconds, interval = 1 second)
 
-    val TransactionReceived(tx, 0, received, sent, _, _) = listener.receiveOne(5 seconds)
+    val TransactionReceived(tx, 0, received, _, _, _) = listener.receiveOne(5 seconds)
     assert(tx.txid === ByteVector32.fromValidHex(txid))
     assert(received === 100000000.sat)
 
@@ -260,7 +263,7 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
     val JString(address) = probe.expectMsgType[JValue]
     val tx = new Transaction(2, Nil, new TxOut(Btc(1), fr.acinq.eclair.addressToPublicKeyScript(address, Block.RegtestGenesisBlock.hash)) :: Nil, 0L)
     probe.send(wallet, CompleteTransaction(tx, 20000))
-    val CompleteTransactionResponse(tx1, fee1, None) = probe.expectMsgType[CompleteTransactionResponse]
+    val CompleteTransactionResponse(tx1, _, None) = probe.expectMsgType[CompleteTransactionResponse]
 
     // send it ourselves
     logger.info(s"sending 1 btc to $address with tx ${tx1.txid}")
@@ -287,7 +290,7 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
       val JString(address) = probe.expectMsgType[JValue]
       val tmp = new Transaction(2, Nil,  new TxOut(Btc(1), fr.acinq.eclair.addressToPublicKeyScript(address, Block.RegtestGenesisBlock.hash)) :: Nil, 0L)
       probe.send(wallet, CompleteTransaction(tmp, 20000))
-      val CompleteTransactionResponse(tx, fee1, None) = probe.expectMsgType[CompleteTransactionResponse]
+      val CompleteTransactionResponse(tx, _, None) = probe.expectMsgType[CompleteTransactionResponse]
       probe.send(wallet, CancelTransaction(tx))
       probe.expectMsg(CancelTransactionResponse(tx))
       tx
@@ -297,16 +300,16 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
       val JString(address) = probe.expectMsgType[JValue]
       val tmp = new Transaction(2, Nil,  new TxOut(Btc(1), fr.acinq.eclair.addressToPublicKeyScript(address, Block.RegtestGenesisBlock.hash)) :: Nil, 0L)
       probe.send(wallet, CompleteTransaction(tmp, 20000))
-      val CompleteTransactionResponse(tx, fee1, None) = probe.expectMsgType[CompleteTransactionResponse]
+      val CompleteTransactionResponse(tx, _, None) = probe.expectMsgType[CompleteTransactionResponse]
       probe.send(wallet, CancelTransaction(tx))
       probe.expectMsg(CancelTransactionResponse(tx))
       tx
     }
 
     probe.send(wallet, IsDoubleSpent(tx1))
-    probe.expectMsg(IsDoubleSpentResponse(tx1, false))
+    probe.expectMsg(IsDoubleSpentResponse(tx1, isDoubleSpent = false))
     probe.send(wallet, IsDoubleSpent(tx2))
-    probe.expectMsg(IsDoubleSpentResponse(tx2, false))
+    probe.expectMsg(IsDoubleSpentResponse(tx2, isDoubleSpent = false))
 
     // publish tx1
     probe.send(wallet, BroadcastTransaction(tx1))
@@ -320,9 +323,9 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
 
     // as long as tx1 is unconfirmed tx2 won't be considered double-spent
     probe.send(wallet, IsDoubleSpent(tx1))
-    probe.expectMsg(IsDoubleSpentResponse(tx1, false))
+    probe.expectMsg(IsDoubleSpentResponse(tx1, isDoubleSpent = false))
     probe.send(wallet, IsDoubleSpent(tx2))
-    probe.expectMsg(IsDoubleSpentResponse(tx2, false))
+    probe.expectMsg(IsDoubleSpentResponse(tx2, isDoubleSpent = false))
 
     generateBlocks(bitcoincli, 2)
 
@@ -334,9 +337,9 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
 
     // tx2 is double-spent
     probe.send(wallet, IsDoubleSpent(tx1))
-    probe.expectMsg(IsDoubleSpentResponse(tx1, false))
+    probe.expectMsg(IsDoubleSpentResponse(tx1, isDoubleSpent = false))
     probe.send(wallet, IsDoubleSpent(tx2))
-    probe.expectMsg(IsDoubleSpentResponse(tx2, true))
+    probe.expectMsg(IsDoubleSpentResponse(tx2, isDoubleSpent = true))
   }
 
   test("use all available balance") {

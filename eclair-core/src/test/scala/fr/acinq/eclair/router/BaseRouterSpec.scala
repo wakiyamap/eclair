@@ -20,7 +20,8 @@ import akka.actor.ActorRef
 import akka.testkit.TestProbe
 import fr.acinq.bitcoin.PrivateKey
 import fr.acinq.bitcoin.Script.{pay2wsh, write}
-import fr.acinq.bitcoin.{Block, ByteVector32, Hex, PrivateKey, Transaction, TxOut}
+import fr.acinq.bitcoin.{Block, ByteVector32, PrivateKey, Transaction, TxOut}
+import fr.acinq.secp256k1.Hex
 import fr.acinq.eclair.TestConstants.Alice
 import fr.acinq.eclair.blockchain.{UtxoStatus, ValidateRequest, ValidateResult, WatchSpentBasic}
 import fr.acinq.eclair.channel.{CommitmentsSpec, LocalChannelUpdate}

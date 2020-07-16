@@ -24,7 +24,8 @@ import akka.testkit
 import akka.testkit.{TestActor, TestFSMRef, TestProbe}
 import fr.acinq.bitcoin.PublicKey
 import fr.acinq.bitcoin.DeterministicWallet.derivePrivateKey
-import fr.acinq.bitcoin.{Block, BlockHeader, ByteVector32, Crypto, DeterministicWallet, Hex, MnemonicCode, OutPoint, Satoshi, Script, Transaction, TxIn, TxOut}
+import fr.acinq.bitcoin.{Block, BlockHeader, ByteVector32, Crypto, DeterministicWallet, MnemonicCode, OutPoint, Satoshi, Script, Transaction, TxIn, TxOut}
+import fr.acinq.secp256k1.Hex
 import fr.acinq.eclair.LongToBtcAmount
 import fr.acinq.eclair.blockchain.bitcoind.rpc.Error
 import fr.acinq.eclair.blockchain.electrum.ElectrumClient._

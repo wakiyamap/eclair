@@ -23,6 +23,7 @@ import akka.event.Logging.MDC
 import akka.event._
 import akka.io.Tcp
 import akka.util.ByteString
+import fr.acinq.bitcoin.crypto.Pack
 import fr.acinq.bitcoin.{BtcSerializer, Protocol, PublicKey}
 import fr.acinq.eclair.Logs.LogCategory
 import fr.acinq.eclair.crypto.ChaCha20Poly1305.ChaCha20Poly1305Error
@@ -384,7 +385,7 @@ object TransportHandler {
         case (None, _) =>
           val (ciphertext, remainder) = buffer.splitAt(18)
           val (dec1, plaintext) = state.decryptWithAd(ByteVector.empty, ByteVector.view(ciphertext.asByteBuffer))
-          val length = BtcSerializer.uint16BE(plaintext.toArray) // Protocol.uint16(plaintext.toArray, ByteOrder.BIG_ENDIAN)
+          val length = Pack.int16BE(plaintext.toArray, 0) // Protocol.uint16(plaintext.toArray, ByteOrder.BIG_ENDIAN)
           Decryptor(dec1, ciphertextLength = Some(length), buffer = remainder).decrypt(acc)
         case (Some(expectedLength), length) if length < expectedLength + 16 => (Decryptor(state, ciphertextLength, buffer), acc)
         case (Some(expectedLength), _) =>
@@ -418,7 +419,7 @@ object TransportHandler {
      * @return a (cipherstate, ciphertext) tuple where ciphertext is encrypted according to BOLT #8
      */
     def encrypt(plaintext: ByteVector): (Encryptor, ByteVector) = {
-      val (state1, ciphertext1) = state.encryptWithAd(ByteVector.empty, BtcSerializer.writeUInt16BE(plaintext.length.toInt))
+      val (state1, ciphertext1) = state.encryptWithAd(ByteVector.empty, Pack.writeInt16BE(plaintext.length.toShort))
       val (state2, ciphertext2) = state1.encryptWithAd(ByteVector.empty, plaintext)
       (Encryptor(state2), ciphertext1 ++ ciphertext2)
     }

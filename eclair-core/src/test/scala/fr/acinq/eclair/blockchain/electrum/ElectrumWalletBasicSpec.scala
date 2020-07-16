@@ -21,11 +21,11 @@ import java.sql.DriverManager
 import fr.acinq.bitcoin.PrivateKey
 import fr.acinq.bitcoin.DeterministicWallet.{ExtendedPrivateKey, derivePrivateKey}
 import fr.acinq.bitcoin._
+import fr.acinq.secp256k1.Hex
 import fr.acinq.eclair.blockchain.electrum.db.sqlite.SqliteWalletDb
 import fr.acinq.eclair.transactions.{Scripts, Transactions}
 import grizzled.slf4j.Logging
 import org.scalatest.funsuite.AnyFunSuite
-import scodec.bits.ByteVector
 
 import scala.util.{Failure, Random, Success, Try}
 import fr.acinq.eclair.KotlinUtils._

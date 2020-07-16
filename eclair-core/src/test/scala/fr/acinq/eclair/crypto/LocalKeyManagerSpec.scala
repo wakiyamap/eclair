@@ -16,10 +16,13 @@
 
 package fr.acinq.eclair.crypto
 
-import fr.acinq.bitcoin.{Block, BtcSerializer, ByteVector => ByteVectorAcinq, ByteVector32, DeterministicWallet, Hex, KeyPath, PrivateKey, PublicKey}
+import fr.acinq.bitcoin.crypto.Pack
+import fr.acinq.bitcoin.{Block, BtcSerializer, ByteVector32, DeterministicWallet, KeyPath, PrivateKey, PublicKey, ByteVector => ByteVectorAcinq}
+import fr.acinq.secp256k1.Hex
 import fr.acinq.eclair.TestConstants
 import fr.acinq.eclair.channel.ChannelVersion
 import org.scalatest.funsuite.AnyFunSuite
+
 import scala.jdk.CollectionConverters._
 import fr.acinq.eclair.KotlinUtils._
 
@@ -67,7 +70,7 @@ class LocalKeyManagerSpec extends AnyFunSuite {
   }
 
   def makefundingKeyPath(entropy: Array[Byte], isFunder: Boolean) = {
-    val items = for(i <- 0 to 7) yield BtcSerializer.uint32BE(entropy.drop(i * 4).take(4).toArray) & 0xFFFFFFFFL
+    val items = for(i <- 0 to 7) yield Pack.int32BE(entropy.drop(i * 4).take(4).toArray, 0) & 0xFFFFFFFFL
     val last = DeterministicWallet.hardened(if (isFunder) 1L else 0L)
     new KeyPath((items :+ last).toList.map(_.asInstanceOf[java.lang.Long]).asJava)
   }

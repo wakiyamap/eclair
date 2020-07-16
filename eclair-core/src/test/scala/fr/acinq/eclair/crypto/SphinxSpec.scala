@@ -16,7 +16,8 @@
 
 package fr.acinq.eclair.crypto
 
-import fr.acinq.bitcoin.{ByteVector32, Hex, PrivateKey, PublicKey}
+import fr.acinq.bitcoin.{ByteVector32, PrivateKey, PublicKey}
+import fr.acinq.secp256k1.Hex
 import fr.acinq.eclair.wire._
 import fr.acinq.eclair.{UInt64, wire}
 import org.scalatest.funsuite.AnyFunSuite

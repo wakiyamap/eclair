@@ -18,6 +18,7 @@ package fr.acinq.eclair.payment
 
 import akka.actor.FSM.{CurrentState, SubscribeTransitionCallBack, Transition}
 import akka.testkit.{TestActorRef, TestProbe}
+import fr.acinq.bitcoin.crypto.Pack
 import fr.acinq.bitcoin.{BtcSerializer, ByteVector32}
 import fr.acinq.eclair.payment.receive.MultiPartPaymentFSM
 import fr.acinq.eclair.payment.receive.MultiPartPaymentFSM._
@@ -228,7 +229,7 @@ object MultiPartPaymentFSMSpec {
 
   val paymentHash = randomBytes32
 
-  def htlcIdToChannelId(htlcId: Long) = new ByteVector32(new Array[Byte](32 - 8) ++ BtcSerializer.writeUInt64(htlcId))
+  def htlcIdToChannelId(htlcId: Long) = new ByteVector32(new Array[Byte](32 - 8) ++ Pack.writeInt64BE(htlcId))
 
   def createMultiPartHtlc(totalAmount: MilliSatoshi, htlcAmount: MilliSatoshi, htlcId: Long): HtlcPart = {
     val htlc = UpdateAddHtlc(htlcIdToChannelId(htlcId), htlcId, htlcAmount, paymentHash, CltvExpiry(42), TestConstants.emptyOnionPacket)

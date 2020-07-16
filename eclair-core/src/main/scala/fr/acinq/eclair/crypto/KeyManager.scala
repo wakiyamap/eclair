@@ -122,7 +122,7 @@ object KeyManager {
   def channelKeyPath(fundingPubKey: PublicKey) : KeyPath = {
     import scala.jdk.CollectionConverters._
     val buffer = Crypto.sha256(fundingPubKey.value)
-    def next(counter: Int): java.lang.Long = Pack.INSTANCE.uint32BE(buffer, 4 * counter).toLong & 0xffffffffL  //Protocol.uint32(bis, ByteOrder.BIG_ENDIAN)
+    def next(counter: Int): java.lang.Long = Pack.int32BE(buffer, 4 * counter).toLong & 0xffffffffL  //Protocol.uint32(bis, ByteOrder.BIG_ENDIAN)
     new KeyPath(List(next(0), next(1), next(2), next(3), next(4), next(5), next(6), next(7)).asJava)
   }
 

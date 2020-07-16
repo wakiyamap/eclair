@@ -18,7 +18,9 @@ package fr.acinq.eclair.payment
 
 import java.nio.ByteOrder
 
-import fr.acinq.bitcoin.{Block, BtcSerializer, ByteVector32, Crypto, Hex, PrivateKey, Protocol, PublicKey}
+import fr.acinq.bitcoin.crypto.Pack
+import fr.acinq.bitcoin.{Block, BtcSerializer, ByteVector32, Crypto, PrivateKey, Protocol, PublicKey}
+import fr.acinq.secp256k1.Hex
 import fr.acinq.eclair.Features.{PaymentSecret, _}
 import fr.acinq.eclair.payment.PaymentRequest._
 import fr.acinq.eclair.{CltvExpiryDelta, LongToBtcAmount, ShortChannelId, ToMilliSatoshiConversion}
@@ -158,8 +160,8 @@ class PaymentRequestSpec extends AnyFunSuite {
       ExtraHop(PublicKey.fromHex("029e03a901b85534ff1e92c43c74431f7ce72046060fcf7a95c37e148f78c77255"), ShortChannelId(72623859790382856L), 1 msat, 20, CltvExpiryDelta(3)),
       ExtraHop(PublicKey.fromHex("039e03a901b85534ff1e92c43c74431f7ce72046060fcf7a95c37e148f78c77255"), ShortChannelId(217304205466536202L), 2 msat, 30, CltvExpiryDelta(4))
     )))
-    assert(Hex.encode(BtcSerializer.writeUInt64BE(0x0102030405060708L)) == "0102030405060708")
-    assert(Hex.encode(BtcSerializer.writeUInt64BE(0x030405060708090aL)) == "030405060708090a")
+    assert(Hex.encode(Pack.writeInt64BE(0x0102030405060708L)) == "0102030405060708")
+    assert(Hex.encode(Pack.writeInt64BE(0x030405060708090aL)) == "030405060708090a")
     assert(pr.tags.size == 4)
     assert(PaymentRequest.write(pr.sign(priv)) == ref)
   }

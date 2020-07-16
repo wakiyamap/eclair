@@ -22,6 +22,7 @@ import fr.acinq.bitcoin.{PrivateKey, PublicKey, ByteVector => ByteVectorAcinq}
 import fr.acinq.bitcoin.Crypto.{ripemd160, sha256}
 import fr.acinq.bitcoin.Script._
 import fr.acinq.bitcoin._
+import fr.acinq.secp256k1.Hex
 import fr.acinq.eclair.blockchain.EclairWallet
 import fr.acinq.eclair.blockchain.fee.{FeeEstimator, FeeTargets, FeerateTolerance}
 import fr.acinq.eclair.channel.Channel.REFRESH_CHANNEL_UPDATE_INTERVAL

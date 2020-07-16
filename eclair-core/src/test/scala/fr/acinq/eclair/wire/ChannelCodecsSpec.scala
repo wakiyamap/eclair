@@ -21,7 +21,8 @@ import java.util.UUID
 
 import akka.actor.ActorSystem
 import com.google.common.net.HostAndPort
-import fr.acinq.bitcoin.{Block, ByteVector32, ByteVector64, Crypto, DeterministicWallet, Hex, KeyPath, OutPoint, PrivateKey, PublicKey, Satoshi, Script, Transaction, ByteVector => ByteVectorAcinq}
+import fr.acinq.bitcoin.{Block, ByteVector32, ByteVector64, Crypto, DeterministicWallet, KeyPath, OutPoint, PrivateKey, PublicKey, Satoshi, Script, Transaction, ByteVector => ByteVectorAcinq}
+import fr.acinq.secp256k1.Hex
 import fr.acinq.eclair.channel.Helpers.Funding
 import fr.acinq.eclair.channel._
 import fr.acinq.eclair.crypto.{LocalKeyManager, ShaChain}

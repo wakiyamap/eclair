@@ -2,7 +2,8 @@ package fr.acinq.eclair.io
 
 import akka.actor.ActorRef
 import akka.testkit.{TestActorRef, TestProbe}
-import fr.acinq.bitcoin.{ByteVector64, Hex, PublicKey}
+import fr.acinq.bitcoin.{ByteVector64, PublicKey}
+import fr.acinq.secp256k1.Hex
 import fr.acinq.eclair.TestConstants._
 import fr.acinq.eclair.blockchain.TestWallet
 import fr.acinq.eclair.wire._

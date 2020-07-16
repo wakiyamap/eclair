@@ -19,7 +19,8 @@ package fr.acinq.eclair.crypto
 import java.math.BigInteger
 import java.nio.ByteOrder
 
-import fr.acinq.bitcoin.{BtcSerializer, Crypto, PrivateKey, Protocol}
+import fr.acinq.bitcoin.crypto.Pack
+import fr.acinq.bitcoin.{BtcSerializer, Crypto, PrivateKey, Protocol, PublicKey}
 import fr.acinq.eclair.randomBytes
 import grizzled.slf4j.Logging
 import org.spongycastle.crypto.digests.SHA256Digest
@@ -71,7 +72,7 @@ object Noise {
       * @return sha256(publicKey * keyPair.priv in compressed format)
       */
     override def dh(keyPair: KeyPair, publicKey: ByteVector): ByteVector = {
-      val secret = fr.acinq.bitcoin.crypto.Secp256k1.INSTANCE.ecdh(keyPair.priv.toArray, publicKey.toArray)
+      val secret = Crypto.ecdh(new PrivateKey(keyPair.priv.toArray), new PublicKey(publicKey.toArray))
       ByteVector.view(secret)
     }
 
@@ -101,7 +102,7 @@ object Noise {
     override val name = "ChaChaPoly"
 
     // as specified in BOLT #8
-    def nonce(n: Long): ByteVector = ByteVector.fill(4)(0) ++ ByteVector.view(BtcSerializer.writeUInt64(n))
+    def nonce(n: Long): ByteVector = ByteVector.fill(4)(0) ++ ByteVector.view(Pack.writeInt64LE(n))
 
     // Encrypts plaintext using the cipher key k of 32 bytes and an 8-byte unsigned integer nonce n which must be unique.
     override def encrypt(k: ByteVector, n: Long, ad: ByteVector, plaintext: ByteVector): ByteVector = {

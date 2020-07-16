@@ -23,7 +23,8 @@ import akka.actor.Props
 import akka.testkit.{TestKit, TestProbe}
 import fr.acinq.eclair.blockchain.WatcherSpec._
 import fr.acinq.bitcoin.PrivateKey
-import fr.acinq.bitcoin.{Base58, Bech32, ByteVector32, Hex, OutPoint, SigHash, Script, ScriptFlags, ScriptWitness, SigVersion, Transaction, TxIn, TxOut}
+import fr.acinq.bitcoin.{Base58, Bech32, ByteVector32, OutPoint, SigHash, Script, ScriptFlags, ScriptWitness, SigVersion, Transaction, TxIn, TxOut}
+import fr.acinq.secp256k1.Hex
 import SigHash.SIGHASH_ALL
 import fr.acinq.bitcoin.{ByteVector => ByteVectorAcinq }
 import fr.acinq.eclair.blockchain._

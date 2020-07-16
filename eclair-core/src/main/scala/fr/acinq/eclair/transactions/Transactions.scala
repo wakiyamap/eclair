@@ -19,6 +19,7 @@ package fr.acinq.eclair.transactions
 import fr.acinq.bitcoin.{PrivateKey, PublicKey}
 import fr.acinq.bitcoin.Crypto
 import fr.acinq.bitcoin.{ByteVector => ByteVectorAcinq}
+import fr.acinq.secp256k1.Hex
 import Crypto.ripemd160
 import fr.acinq.bitcoin.Script._
 import fr.acinq.bitcoin.SigVersion._
@@ -31,6 +32,7 @@ import fr.acinq.eclair.wire.UpdateAddHtlc
 import scala.util.Try
 import scala.collection.JavaConverters._
 import KotlinUtils._
+import fr.acinq.bitcoin.crypto.Pack
 
 /**
  * Created by PM on 15/12/2016.
@@ -178,7 +180,7 @@ object Transactions {
     else
       Crypto.sha256(remotePaymentBasePoint.value concat localPaymentBasePoint.value)
 
-    val blind = BtcSerializer.uint64((h.takeRight(6).reverse ++ Hex.decode("0000")).toArray) //  Protocol.uint64((h.takeRight(6).reverse ++ ByteVector.fromValidHex("0000")).toArray, ByteOrder.LITTLE_ENDIAN)
+    val blind = Pack.int64LE((h.takeRight(6).reverse ++ Hex.decode("0000")).toArray, 0) //  Protocol.uint64((h.takeRight(6).reverse ++ ByteVector.fromValidHex("0000")).toArray, ByteOrder.LITTLE_ENDIAN)
     commitTxNumber ^ blind
   }
 
