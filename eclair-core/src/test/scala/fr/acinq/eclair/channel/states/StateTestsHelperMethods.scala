@@ -96,15 +96,15 @@ trait StateTestsHelperMethods extends TestKitBase with FixtureTestSuite with Par
     val channelFlags = if (tags.contains("channels_public")) ChannelFlags.AnnounceChannel else ChannelFlags.Empty
     val pushMsat = if (tags.contains("no_push_msat")) 0.msat else TestConstants.pushMsat
     val aliceParams = Alice.channelParams
-      .modify(_.channelReserve).setToIf(channelVersion.isSet(ChannelVersion.ZERO_RESERVE_BIT))(0.sat)
-      .modify(_.localPaymentBasepoint).setToIf(channelVersion.isSet(ChannelVersion.USE_STATIC_REMOTEKEY_BIT))(Some(Helpers.getWalletPaymentBasepoint(wallet)))
-      .modify(_.features).setToIf(channelVersion.isSet(ChannelVersion.USE_STATIC_REMOTEKEY_BIT))(Features(Set(ActivatedFeature(StaticRemoteKey, Optional))))
+      .modify(_.channelReserve).setToIf(channelVersion.hasZeroReserve)(0.sat)
+      .modify(_.staticPaymentBasepoint).setToIf(channelVersion.hasStaticRemotekey)(Some(Helpers.getWalletPaymentBasepoint(wallet)))
+      .modify(_.features).setToIf(channelVersion.hasStaticRemotekey)(Features(Set(ActivatedFeature(StaticRemoteKey, Optional))))
 
     val bobParams = Bob.channelParams
-      .modify(_.localPaymentBasepoint).setToIf(channelVersion.isSet(ChannelVersion.USE_STATIC_REMOTEKEY_BIT))(Some(Helpers.getWalletPaymentBasepoint(wallet)))
-      .modify(_.features).setToIf(channelVersion.isSet(ChannelVersion.USE_STATIC_REMOTEKEY_BIT))(Features(Set(ActivatedFeature(StaticRemoteKey, Optional))))
+      .modify(_.staticPaymentBasepoint).setToIf(channelVersion.hasStaticRemotekey)(Some(Helpers.getWalletPaymentBasepoint(wallet)))
+      .modify(_.features).setToIf(channelVersion.hasStaticRemotekey)(Features(Set(ActivatedFeature(StaticRemoteKey, Optional))))
 
-    //    val (aliceParams, bobParams) = (Alice.channelParams.modify(_.channelReserve).setToIf(channelVersion.isSet(ChannelVersion.ZERO_RESERVE_BIT))(0.sat), Bob.channelParams)
+    //    val (aliceParams, bobParams) = (Alice.channelParams.modify(_.channelReserve).setToIf(channelVersion.hasZeroReserve)(0.sat), Bob.channelParams)
     val aliceInit = Init(aliceParams.features)
     val bobInit = Init(bobParams.features)
     alice ! INPUT_INIT_FUNDER(ByteVector32.Zeroes, TestConstants.fundingSatoshis, pushMsat, TestConstants.feeratePerKw, TestConstants.feeratePerKw, aliceParams, alice2bob.ref, bobInit, channelFlags, channelVersion)
