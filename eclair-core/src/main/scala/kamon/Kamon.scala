@@ -21,6 +21,8 @@ object Kamon {
 
     def withoutTags() = this
 
+    def withTags(args: TagSet) = this
+
     def withTags(args: TagSet, a: Boolean) = this
 
     def withTags(a: TagSet, b: TagSet, c: Boolean) = this
