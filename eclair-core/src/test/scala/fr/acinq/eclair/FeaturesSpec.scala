@@ -61,7 +61,6 @@ class FeaturesSpec extends AnyFunSuite {
     assert(Features(hex"2000").hasFeature(StaticRemoteKey, Some(Optional)))
   }
 
-
   test("features dependencies") {
     val testCases = Map(
       bin"                        " -> true,
@@ -82,7 +81,14 @@ class FeaturesSpec extends AnyFunSuite {
       bin"000000101000000000000000" -> true, // we allow not setting var_onion_optin
       bin"000000011000000000000000" -> true, // we allow not setting var_onion_optin
       bin"000000011000001000000000" -> true,
-      bin"000000100100000100000000" -> true
+      bin"000000100100000100000000" -> true,
+      // option_anchor_outputs depends on option_static_remotekey
+      bin"001000000000000000000000" -> false,
+      bin"000100000000000000000000" -> false,
+      bin"001000000010000000000000" -> true,
+      bin"001000000001000000000000" -> true,
+      bin"000100000010000000000000" -> true,
+      bin"000100000001000000000000" -> true
     )
 
     for ((testCase, valid) <- testCases) {
@@ -112,6 +118,8 @@ class FeaturesSpec extends AnyFunSuite {
     assert(areSupported(Features(Set(ActivatedFeature(BasicMultiPartPayment, Optional)))))
     assert(areSupported(Features(Set(ActivatedFeature(Wumbo, Mandatory)))))
     assert(areSupported(Features(Set(ActivatedFeature(Wumbo, Optional)))))
+    assert(!areSupported(Features(Set(ActivatedFeature(AnchorOutputs, Mandatory))))) // NB: we're not ready to fully support anchor outputs
+    assert(areSupported(Features(Set(ActivatedFeature(AnchorOutputs, Optional)))))
 
     val testCases = Map(
       bin"            00000000000000001011" -> true,
@@ -243,6 +251,26 @@ class FeaturesSpec extends AnyFunSuite {
       """.stripMargin)
 
       assertThrows[RuntimeException](fromConfiguration(confWithUnknownSupport))
+    }
+
+    {
+      val confWithDisabledFeatures = ConfigFactory.parseString(
+        """
+          |features {
+          |  option_data_loss_protect = disabled
+          |  gossip_queries = optional
+          |  payment_secret = mandatory
+          |  option_support_large_channel = disabled
+          |  gossip_queries_ex = mandatory
+          |}
+        """.stripMargin)
+
+      val features = fromConfiguration(confWithDisabledFeatures)
+      assert(!features.hasFeature(OptionDataLossProtect))
+      assert(!features.hasFeature(Wumbo))
+      assert(features.hasFeature(ChannelRangeQueries))
+      assert(features.hasFeature(ChannelRangeQueriesExtended))
+      assert(features.hasFeature(PaymentSecret))
     }
   }
 

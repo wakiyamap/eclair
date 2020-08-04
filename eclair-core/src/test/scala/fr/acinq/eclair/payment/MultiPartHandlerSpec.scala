@@ -17,10 +17,10 @@
 package fr.acinq.eclair.payment
 
 import akka.actor.Status.Failure
-import akka.testkit.{TestActorRef, TestKit, TestProbe}
+import akka.testkit.{TestActorRef, TestProbe}
 import fr.acinq.bitcoin.{ByteVector32, Crypto}
 import fr.acinq.eclair.FeatureSupport.Optional
-import fr.acinq.eclair.Features.{BasicMultiPartPayment, ChannelRangeQueries, ChannelRangeQueriesExtended, InitialRoutingSync, OptionDataLossProtect, PaymentSecret, VariableLengthOnion}
+import fr.acinq.eclair.Features._
 import fr.acinq.eclair.TestConstants.Alice
 import fr.acinq.eclair.channel.{CMD_FAIL_HTLC, CMD_FULFILL_HTLC, Register}
 import fr.acinq.eclair.db.IncomingPaymentStatus
@@ -29,8 +29,9 @@ import fr.acinq.eclair.payment.PaymentRequest.ExtraHop
 import fr.acinq.eclair.payment.receive.MultiPartHandler.{GetPendingPayments, PendingPayments, ReceivePayment}
 import fr.acinq.eclair.payment.receive.MultiPartPaymentFSM.HtlcPart
 import fr.acinq.eclair.payment.receive.{MultiPartPaymentFSM, PaymentHandler}
+import fr.acinq.eclair.wire.Onion.FinalTlvPayload
 import fr.acinq.eclair.wire._
-import fr.acinq.eclair.{ActivatedFeature, CltvExpiry, CltvExpiryDelta, Features, LongToBtcAmount, NodeParams, ShortChannelId, TestConstants, TestKitBaseClass, randomKey}
+import fr.acinq.eclair.{ActivatedFeature, CltvExpiry, CltvExpiryDelta, Features, LongToBtcAmount, NodeParams, ShortChannelId, TestConstants, TestKitBaseClass, randomBytes32, randomKey}
 import org.scalatest.Outcome
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
 
@@ -52,9 +53,15 @@ class MultiPartHandlerSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike 
     ActivatedFeature(BasicMultiPartPayment, Optional)
   ))
 
+  val featuresWithKeySend = Features(Set(
+    ActivatedFeature(VariableLengthOnion, Optional),
+    ActivatedFeature(KeySend, Optional)
+  ))
+
   case class FixtureParam(nodeParams: NodeParams, defaultExpiry: CltvExpiry, register: TestProbe, eventListener: TestProbe, sender: TestProbe) {
     lazy val normalHandler = TestActorRef[PaymentHandler](PaymentHandler.props(nodeParams, register.ref))
     lazy val mppHandler = TestActorRef[PaymentHandler](PaymentHandler.props(nodeParams.copy(features = featuresWithMpp), register.ref))
+    lazy val keySendHandler = TestActorRef[PaymentHandler](PaymentHandler.props(nodeParams.copy(features = featuresWithKeySend), register.ref))
   }
 
   override def withFixture(test: OneArgTest): Outcome = {
@@ -63,7 +70,7 @@ class MultiPartHandlerSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike 
       val register = TestProbe()
       val eventListener = TestProbe()
       system.eventStream.subscribe(eventListener.ref, classOf[PaymentEvent])
-      withFixture(test.toNoArgTest(FixtureParam(nodeParams, CltvExpiryDelta(12).toCltvExpiry(nodeParams.currentBlockHeight), register, eventListener, TestProbe())))
+      withFixture(test.toNoArgTest(FixtureParam(nodeParams, nodeParams.minFinalExpiryDelta.toCltvExpiry(nodeParams.currentBlockHeight), register, eventListener, TestProbe())))
     }
   }
 
@@ -160,10 +167,14 @@ class MultiPartHandlerSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike 
     import f._
 
     sender.send(normalHandler, ReceivePayment(Some(42000 msat), "1 coffee"))
-    assert(sender.expectMsgType[PaymentRequest].expiry === Some(Alice.nodeParams.paymentRequestExpiry.toSeconds))
+    val pr1 = sender.expectMsgType[PaymentRequest]
+    assert(pr1.minFinalCltvExpiryDelta === Some(nodeParams.minFinalExpiryDelta))
+    assert(pr1.expiry === Some(Alice.nodeParams.paymentRequestExpiry.toSeconds))
 
     sender.send(normalHandler, ReceivePayment(Some(42000 msat), "1 coffee with custom expiry", expirySeconds_opt = Some(60)))
-    assert(sender.expectMsgType[PaymentRequest].expiry === Some(60))
+    val pr2 = sender.expectMsgType[PaymentRequest]
+    assert(pr2.minFinalCltvExpiryDelta === Some(nodeParams.minFinalExpiryDelta))
+    assert(pr2.expiry === Some(60))
   }
 
   test("Payment request generation with trampoline support") { _ =>
@@ -272,7 +283,8 @@ class MultiPartHandlerSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike 
     val pr = sender.expectMsgType[PaymentRequest]
     assert(pr.features.allowMultiPart)
 
-    val add = UpdateAddHtlc(ByteVector32.One, 0, 800 msat, pr.paymentHash, CltvExpiryDelta(1).toCltvExpiry(nodeParams.currentBlockHeight), TestConstants.emptyOnionPacket)
+    val lowCltvExpiry = nodeParams.fulfillSafetyBeforeTimeout.toCltvExpiry(nodeParams.currentBlockHeight)
+    val add = UpdateAddHtlc(ByteVector32.One, 0, 800 msat, pr.paymentHash, lowCltvExpiry, TestConstants.emptyOnionPacket)
     sender.send(mppHandler, IncomingPacket.FinalPacket(add, Onion.createMultiPartPayload(add.amountMsat, 1000 msat, add.cltvExpiry, pr.paymentSecret.get)))
     val cmd = register.expectMsgType[Register.Forward[CMD_FAIL_HTLC]].message
     assert(cmd.reason == Right(IncorrectOrUnknownPaymentDetails(1000 msat, nodeParams.currentBlockHeight)))
@@ -455,4 +467,41 @@ class MultiPartHandlerSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike 
     })
   }
 
+  test("PaymentHandler should handle single-part KeySend payment") { f =>
+    import f._
+
+    val amountMsat = 42000 msat
+    val paymentPreimage = randomBytes32
+    val paymentHash = paymentPreimage.sha256()
+    val payload = FinalTlvPayload(TlvStream(Seq(OnionTlv.AmountToForward(amountMsat), OnionTlv.OutgoingCltv(defaultExpiry), OnionTlv.KeySend(paymentPreimage))))
+
+    assert(nodeParams.db.payments.getIncomingPayment(paymentHash) === None)
+
+    val add = UpdateAddHtlc(ByteVector32.One, 0, amountMsat, paymentHash, defaultExpiry, TestConstants.emptyOnionPacket)
+    sender.send(keySendHandler, IncomingPacket.FinalPacket(add, payload))
+    register.expectMsgType[Register.Forward[CMD_FULFILL_HTLC]]
+
+    val paymentReceived = eventListener.expectMsgType[PaymentReceived]
+    assert(paymentReceived.copy(parts = paymentReceived.parts.map(_.copy(timestamp = 0))) === PaymentReceived(add.paymentHash, PartialPayment(amountMsat, add.channelId, timestamp = 0) :: Nil))
+    val received = nodeParams.db.payments.getIncomingPayment(paymentHash)
+    assert(received.isDefined && received.get.status.isInstanceOf[IncomingPaymentStatus.Received])
+    assert(received.get.status.asInstanceOf[IncomingPaymentStatus.Received].copy(receivedAt = 0) === IncomingPaymentStatus.Received(amountMsat, 0))
+  }
+
+  test("PaymentHandler should reject KeySend payment when feature is disabled") { f =>
+    import f._
+
+    val amountMsat = 42000 msat
+    val paymentPreimage = randomBytes32
+    val paymentHash = paymentPreimage.sha256()
+    val payload = FinalTlvPayload(TlvStream(Seq(OnionTlv.AmountToForward(amountMsat), OnionTlv.OutgoingCltv(defaultExpiry), OnionTlv.KeySend(paymentPreimage))))
+
+    assert(nodeParams.db.payments.getIncomingPayment(paymentHash) === None)
+
+    val add = UpdateAddHtlc(ByteVector32.One, 0, amountMsat, paymentHash, defaultExpiry, TestConstants.emptyOnionPacket)
+    sender.send(normalHandler, IncomingPacket.FinalPacket(add, payload))
+
+    f.register.expectMsg(Register.Forward(add.channelId, CMD_FAIL_HTLC(add.id, Right(IncorrectOrUnknownPaymentDetails(42000 msat, nodeParams.currentBlockHeight)), commit = true)))
+    assert(nodeParams.db.payments.getIncomingPayment(paymentHash) === None)
+  }
 }

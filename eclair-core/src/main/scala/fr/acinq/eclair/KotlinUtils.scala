@@ -1,6 +1,6 @@
 package fr.acinq.eclair
 
-import fr.acinq.bitcoin.{BtcAmount, ByteVector32, PublicKey, Satoshi, ScriptElt, Transaction, TxIn, TxOut}
+import fr.acinq.bitcoin.{BtcAmount, ByteVector, ByteVector32, PublicKey, Satoshi, ScriptElt, Transaction, TxIn, TxOut}
 
 import scala.jdk.CollectionConverters._
 
@@ -55,4 +55,6 @@ object KotlinUtils {
   implicit def pair2tuple[A](input: kotlin.Pair[A, java.lang.Boolean]): Tuple2[A, Boolean] = (input.getFirst, if (input.getSecond) true else false)
   implicit def satoshi2long(input: Satoshi): Long = input.toLong
   implicit def btcamount2satoshi(input: BtcAmount): Satoshi = input.toSatoshi
+  implicit def scodecbytevector2acinqbytevector(input: scodec.bits.ByteVector): fr.acinq.bitcoin.ByteVector = new ByteVector(input.toArray)
+  implicit def acinqbytevector2scodecbytevector(input: fr.acinq.bitcoin.ByteVector): scodec.bits.ByteVector = scodec.bits.ByteVector(input.toByteArray)
 }

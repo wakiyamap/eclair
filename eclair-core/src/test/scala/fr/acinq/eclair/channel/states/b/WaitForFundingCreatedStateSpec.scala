@@ -32,8 +32,8 @@ import scala.concurrent.duration._
 import fr.acinq.eclair.KotlinUtils._
 
 /**
-  * Created by PM on 05/07/2016.
-  */
+ * Created by PM on 05/07/2016.
+ */
 
 class WaitForFundingCreatedStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with StateTestsHelperMethods {
 
@@ -73,7 +73,7 @@ class WaitForFundingCreatedStateSpec extends TestKitBaseClass with FixtureAnyFun
 
   test("recv FundingCreated (funder can't pay fees)", Tag("funder_below_reserve")) { f =>
     import f._
-    val fees = new Satoshi(Transactions.commitWeight * TestConstants.feeratePerKw / 1000)
+    val fees = new Satoshi(Transactions.DefaultCommitmentFormat.commitWeight * TestConstants.feeratePerKw / 1000)
     val reserve = Bob.channelParams.channelReserve
     val missing = 100.sat minus fees minus reserve
     val fundingCreated = alice2bob.expectMsgType[FundingCreated]

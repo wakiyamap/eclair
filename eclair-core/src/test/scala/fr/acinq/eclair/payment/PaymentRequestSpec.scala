@@ -126,7 +126,7 @@ class PaymentRequestSpec extends AnyFunSuite {
     assert(pr.paymentHash.toHex == "0001020304050607080900010203040506070809000102030405060708090102")
     assert(pr.timestamp == 1496314658L)
     assert(pr.nodeId == PublicKey.fromHex("03e7156ae33b0a208d0744199163177e909e80176e55d97a2f221ede0f934dd9ad"))
-    assert(pr.description == Right(new ByteVector32(Crypto.sha256(ByteVector("One piece of chocolate cake, one icecream cone, one pickle, one slice of swiss cheese, one slice of salami, one lollypop, one piece of cherry pie, one sausage, one cupcake, and one slice of watermelon".getBytes)))))
+    assert(pr.description == Right(new ByteVector32(Crypto.sha256("One piece of chocolate cake, one icecream cone, one pickle, one slice of swiss cheese, one slice of salami, one lollypop, one piece of cherry pie, one sausage, one cupcake, and one slice of watermelon".getBytes))))
     assert(pr.fallbackAddress === None)
     assert(pr.tags.size === 2)
     assert(PaymentRequest.write(pr.sign(priv)) == ref)
@@ -140,7 +140,7 @@ class PaymentRequestSpec extends AnyFunSuite {
     assert(pr.paymentHash.toHex == "0001020304050607080900010203040506070809000102030405060708090102")
     assert(pr.timestamp == 1496314658L)
     assert(pr.nodeId == PublicKey.fromHex("03e7156ae33b0a208d0744199163177e909e80176e55d97a2f221ede0f934dd9ad"))
-    assert(pr.description == Right(new ByteVector32(Crypto.sha256(ByteVector("One piece of chocolate cake, one icecream cone, one pickle, one slice of swiss cheese, one slice of salami, one lollypop, one piece of cherry pie, one sausage, one cupcake, and one slice of watermelon".getBytes)))))
+    assert(pr.description == Right(new ByteVector32(Crypto.sha256("One piece of chocolate cake, one icecream cone, one pickle, one slice of swiss cheese, one slice of salami, one lollypop, one piece of cherry pie, one sausage, one cupcake, and one slice of watermelon".getBytes))))
     assert(pr.fallbackAddress === Some("mk2QpYatsKicvFVuTAQLBryyccRXMUaGHP"))
     assert(pr.tags.size == 3)
     assert(PaymentRequest.write(pr.sign(priv)) == ref)
@@ -154,7 +154,7 @@ class PaymentRequestSpec extends AnyFunSuite {
     assert(pr.paymentHash.toHex == "0001020304050607080900010203040506070809000102030405060708090102")
     assert(pr.timestamp == 1496314658L)
     assert(pr.nodeId == PublicKey.fromHex("03e7156ae33b0a208d0744199163177e909e80176e55d97a2f221ede0f934dd9ad"))
-    assert(pr.description == Right(new ByteVector32(Crypto.sha256(ByteVector("One piece of chocolate cake, one icecream cone, one pickle, one slice of swiss cheese, one slice of salami, one lollypop, one piece of cherry pie, one sausage, one cupcake, and one slice of watermelon".getBytes)))))
+    assert(pr.description == Right(new ByteVector32(Crypto.sha256("One piece of chocolate cake, one icecream cone, one pickle, one slice of swiss cheese, one slice of salami, one lollypop, one piece of cherry pie, one sausage, one cupcake, and one slice of watermelon".getBytes))))
     assert(pr.fallbackAddress === Some("1RustyRX2oai4EYYDpQGWvEL62BBGqN9T"))
     assert(pr.routingInfo === List(List(
       ExtraHop(PublicKey.fromHex("029e03a901b85534ff1e92c43c74431f7ce72046060fcf7a95c37e148f78c77255"), ShortChannelId(72623859790382856L), 1 msat, 20, CltvExpiryDelta(3)),
@@ -174,7 +174,7 @@ class PaymentRequestSpec extends AnyFunSuite {
     assert(pr.paymentHash.toHex == "0001020304050607080900010203040506070809000102030405060708090102")
     assert(pr.timestamp == 1496314658L)
     assert(pr.nodeId == PublicKey.fromHex("03e7156ae33b0a208d0744199163177e909e80176e55d97a2f221ede0f934dd9ad"))
-    assert(pr.description == Right(new ByteVector32(Crypto.sha256(ByteVector("One piece of chocolate cake, one icecream cone, one pickle, one slice of swiss cheese, one slice of salami, one lollypop, one piece of cherry pie, one sausage, one cupcake, and one slice of watermelon".getBytes)))))
+    assert(pr.description == Right(new ByteVector32(Crypto.sha256("One piece of chocolate cake, one icecream cone, one pickle, one slice of swiss cheese, one slice of salami, one lollypop, one piece of cherry pie, one sausage, one cupcake, and one slice of watermelon".getBytes))))
     assert(pr.fallbackAddress === Some("3EktnHQD7RiAE6uzMj2ZifT9YgRrkSgzQX"))
     assert(pr.tags.size == 3)
     assert(PaymentRequest.write(pr.sign(priv)) == ref)
@@ -188,7 +188,7 @@ class PaymentRequestSpec extends AnyFunSuite {
     assert(pr.paymentHash.toHex == "0001020304050607080900010203040506070809000102030405060708090102")
     assert(pr.timestamp == 1496314658L)
     assert(pr.nodeId == PublicKey.fromHex("03e7156ae33b0a208d0744199163177e909e80176e55d97a2f221ede0f934dd9ad"))
-    assert(pr.description == Right(new ByteVector32(Crypto.sha256(ByteVector("One piece of chocolate cake, one icecream cone, one pickle, one slice of swiss cheese, one slice of salami, one lollypop, one piece of cherry pie, one sausage, one cupcake, and one slice of watermelon".getBytes)))))
+    assert(pr.description == Right(new ByteVector32(Crypto.sha256("One piece of chocolate cake, one icecream cone, one pickle, one slice of swiss cheese, one slice of salami, one lollypop, one piece of cherry pie, one sausage, one cupcake, and one slice of watermelon".getBytes))))
     assert(pr.fallbackAddress === Some("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"))
     assert(pr.tags.size == 3)
     assert(PaymentRequest.write(pr.sign(priv)) == ref)
@@ -202,7 +202,7 @@ class PaymentRequestSpec extends AnyFunSuite {
     assert(pr.paymentHash.toHex == "0001020304050607080900010203040506070809000102030405060708090102")
     assert(pr.timestamp == 1496314658L)
     assert(pr.nodeId == PublicKey.fromHex("03e7156ae33b0a208d0744199163177e909e80176e55d97a2f221ede0f934dd9ad"))
-    assert(pr.description == Right(new ByteVector32(Crypto.sha256(ByteVector("One piece of chocolate cake, one icecream cone, one pickle, one slice of swiss cheese, one slice of salami, one lollypop, one piece of cherry pie, one sausage, one cupcake, and one slice of watermelon".getBytes)))))
+    assert(pr.description == Right(new ByteVector32(Crypto.sha256("One piece of chocolate cake, one icecream cone, one pickle, one slice of swiss cheese, one slice of salami, one lollypop, one piece of cherry pie, one sausage, one cupcake, and one slice of watermelon".getBytes))))
     assert(pr.fallbackAddress === Some("bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3"))
     assert(pr.tags.size == 3)
     assert(pr.features.bitmask.isEmpty)
@@ -218,7 +218,7 @@ class PaymentRequestSpec extends AnyFunSuite {
     assert(pr.paymentHash.toHex == "0001020304050607080900010203040506070809000102030405060708090102")
     assert(pr.timestamp == 1496314658L)
     assert(pr.nodeId == PublicKey.fromHex("03e7156ae33b0a208d0744199163177e909e80176e55d97a2f221ede0f934dd9ad"))
-    assert(pr.description == Right(new ByteVector32(Crypto.sha256(ByteVector("One piece of chocolate cake, one icecream cone, one pickle, one slice of swiss cheese, one slice of salami, one lollypop, one piece of cherry pie, one sausage, one cupcake, and one slice of watermelon".getBytes)))))
+    assert(pr.description == Right(new ByteVector32(Crypto.sha256("One piece of chocolate cake, one icecream cone, one pickle, one slice of swiss cheese, one slice of salami, one lollypop, one piece of cherry pie, one sausage, one cupcake, and one slice of watermelon".getBytes))))
     assert(pr.fallbackAddress === Some("bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3"))
     assert(pr.minFinalCltvExpiryDelta === Some(CltvExpiryDelta(12)))
     assert(pr.tags.size == 4)
@@ -312,10 +312,8 @@ class PaymentRequestSpec extends AnyFunSuite {
 
   test("correctly serialize/deserialize variable-length tagged fields") {
     val number = 123456
-
     val codec = PaymentRequest.Codecs.dataCodec(scodec.codecs.bits).as[PaymentRequest.Expiry]
     val field = PaymentRequest.Expiry(number)
-
     assert(field.toLong == number)
 
     val serializedExpiry = codec.encode(field).require
@@ -323,8 +321,8 @@ class PaymentRequestSpec extends AnyFunSuite {
     assert(field1 == field)
 
     // Now with a payment request
-    val pr = PaymentRequest(chainHash = Block.LivenetGenesisBlock.hash, amount = Some(123 msat), paymentHash = new ByteVector32("01" * 32), privateKey = priv, description = "Some invoice", expirySeconds = Some(123456), timestamp = 12345)
-
+    val pr = PaymentRequest(chainHash = Block.LivenetGenesisBlock.hash, amount = Some(123 msat), paymentHash = new ByteVector32("01" * 32), privateKey = priv, description = "Some invoice", minFinalCltvExpiryDelta = CltvExpiryDelta(18), expirySeconds = Some(123456), timestamp = 12345)
+    assert(pr.minFinalCltvExpiryDelta === Some(CltvExpiryDelta(18)))
     val serialized = PaymentRequest.write(pr)
     val pr1 = PaymentRequest.read(serialized)
     assert(pr == pr1)
@@ -343,8 +341,8 @@ class PaymentRequestSpec extends AnyFunSuite {
       ),
       signature = ByteVector.empty).sign(priv)
 
-    val serialized = PaymentRequest write pr
-    val pr1 = PaymentRequest read serialized
+    val serialized = PaymentRequest.write(pr)
+    val pr1 = PaymentRequest.read(serialized)
     val Some(_) = pr1.tags.collectFirst { case u: UnknownTag21 => u }
   }
 
@@ -386,9 +384,7 @@ class PaymentRequestSpec extends AnyFunSuite {
   }
 
   test("supported payment request features") {
-
     case class Result(allowMultiPart: Boolean, requirePaymentSecret: Boolean, areSupported: Boolean) // "supported" is based on the "it's okay to be odd" rule"
-
     val featureBits = Map(
       PaymentRequestFeatures(bin"               00000000000000000000") -> Result(allowMultiPart = false, requirePaymentSecret = false, areSupported = true),
       PaymentRequestFeatures(bin"               00011000001000000000") -> Result(allowMultiPart = true, requirePaymentSecret = false, areSupported = true),
@@ -399,9 +395,9 @@ class PaymentRequestSpec extends AnyFunSuite {
       PaymentRequestFeatures(bin"               01000000000000000000") -> Result(allowMultiPart = false, requirePaymentSecret = false, areSupported = true),
       PaymentRequestFeatures(bin"          0000010000000000000000000") -> Result(allowMultiPart = false, requirePaymentSecret = false, areSupported = true),
       PaymentRequestFeatures(bin"          0000011000000000000000000") -> Result(allowMultiPart = false, requirePaymentSecret = false, areSupported = true),
-      PaymentRequestFeatures(bin"          0000110000000000000000000") -> Result(allowMultiPart = false, requirePaymentSecret = false, areSupported = false),
+      PaymentRequestFeatures(bin"          0000110000001000000000000") -> Result(allowMultiPart = false, requirePaymentSecret = false, areSupported = false),
       // those are useful for nonreg testing of the areSupported method (which needs to be updated with every new supported mandatory bit)
-      PaymentRequestFeatures(bin"          0000100000000000000000000") -> Result(allowMultiPart = false, requirePaymentSecret = false, areSupported = false),
+      PaymentRequestFeatures(bin"          0000100000001000000000000") -> Result(allowMultiPart = false, requirePaymentSecret = false, areSupported = false),
       PaymentRequestFeatures(bin"          0010000000000000000000000") -> Result(allowMultiPart = false, requirePaymentSecret = false, areSupported = false),
       PaymentRequestFeatures(bin"     000001000000000000000000000000") -> Result(allowMultiPart = false, requirePaymentSecret = false, areSupported = false),
       PaymentRequestFeatures(bin"     000100000000000000000000000000") -> Result(allowMultiPart = false, requirePaymentSecret = false, areSupported = false),
@@ -410,7 +406,7 @@ class PaymentRequestSpec extends AnyFunSuite {
     )
 
     for ((features, res) <- featureBits) {
-      val pr = PaymentRequest(Block.LivenetGenesisBlock.hash, Some(123 msat), ByteVector32.One, priv, "Some invoice", features = Some(features))
+      val pr = PaymentRequest(Block.LivenetGenesisBlock.hash, Some(123 msat), ByteVector32.One, priv, "Some invoice", CltvExpiryDelta(18), features = Some(features))
       assert(Result(pr.features.allowMultiPart, pr.features.requirePaymentSecret, pr.features.supported) === res)
       assert(PaymentRequest.read(PaymentRequest.write(pr)) === pr)
     }
@@ -434,7 +430,7 @@ class PaymentRequestSpec extends AnyFunSuite {
   }
 
   test("payment secret") {
-    val pr = PaymentRequest(Block.LivenetGenesisBlock.hash, Some(123 msat), ByteVector32.One, priv, "Some invoice")
+    val pr = PaymentRequest(Block.LivenetGenesisBlock.hash, Some(123 msat), ByteVector32.One, priv, "Some invoice", CltvExpiryDelta(18))
     assert(pr.paymentSecret.isDefined)
     assert(pr.features === PaymentRequestFeatures(PaymentSecret.optional, VariableLengthOnion.optional))
     assert(!pr.features.requirePaymentSecret)
@@ -453,19 +449,19 @@ class PaymentRequestSpec extends AnyFunSuite {
 
     // A multi-part invoice must use a payment secret.
     assertThrows[IllegalArgumentException](
-      PaymentRequest(Block.LivenetGenesisBlock.hash, Some(123 msat), ByteVector32.One, priv, "MPP without secrets", features = Some(PaymentRequestFeatures(BasicMultiPartPayment.optional, VariableLengthOnion.optional)))
+      PaymentRequest(Block.LivenetGenesisBlock.hash, Some(123 msat), ByteVector32.One, priv, "MPP without secrets", CltvExpiryDelta(18), features = Some(PaymentRequestFeatures(BasicMultiPartPayment.optional, VariableLengthOnion.optional)))
     )
   }
 
   test("trampoline") {
-    val pr = PaymentRequest(Block.LivenetGenesisBlock.hash, Some(123 msat), ByteVector32.One, priv, "Some invoice")
+    val pr = PaymentRequest(Block.LivenetGenesisBlock.hash, Some(123 msat), ByteVector32.One, priv, "Some invoice", CltvExpiryDelta(18))
     assert(!pr.features.allowTrampoline)
 
-    val pr1 = PaymentRequest(Block.LivenetGenesisBlock.hash, Some(123 msat), ByteVector32.One, priv, "Some invoice", features = Some(PaymentRequestFeatures(VariableLengthOnion.optional, PaymentSecret.optional, TrampolinePayment.optional)))
+    val pr1 = PaymentRequest(Block.LivenetGenesisBlock.hash, Some(123 msat), ByteVector32.One, priv, "Some invoice", CltvExpiryDelta(18), features = Some(PaymentRequestFeatures(VariableLengthOnion.optional, PaymentSecret.optional, TrampolinePayment.optional)))
     assert(!pr1.features.allowMultiPart)
     assert(pr1.features.allowTrampoline)
 
-    val pr2 = PaymentRequest(Block.LivenetGenesisBlock.hash, Some(123 msat), ByteVector32.One, priv, "Some invoice", features = Some(PaymentRequestFeatures(VariableLengthOnion.optional, PaymentSecret.optional, BasicMultiPartPayment.optional, TrampolinePayment.optional)))
+    val pr2 = PaymentRequest(Block.LivenetGenesisBlock.hash, Some(123 msat), ByteVector32.One, priv, "Some invoice", CltvExpiryDelta(18), features = Some(PaymentRequestFeatures(VariableLengthOnion.optional, PaymentSecret.optional, BasicMultiPartPayment.optional, TrampolinePayment.optional)))
     assert(pr2.features.allowMultiPart)
     assert(pr2.features.allowTrampoline)
 

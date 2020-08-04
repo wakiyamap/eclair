@@ -18,8 +18,11 @@ package fr.acinq.eclair.transactions
 
 import fr.acinq.bitcoin
 import fr.acinq.bitcoin.Script._
-import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, LexicographicalOrdering, OP_0, OP_1, OP_1NEGATE, OP_2, OP_CHECKLOCKTIMEVERIFY, OP_CHECKMULTISIG, OP_CHECKSEQUENCEVERIFY, OP_CHECKSIG, OP_DROP, OP_DUP, OP_ELSE, OP_ENDIF, OP_EQUAL, OP_EQUALVERIFY, OP_HASH160, OP_IF, OP_NOTIF, OP_PUSHDATA, OP_SIZE, OP_SWAP, PublicKey, Satoshi, Script, ScriptElt, ScriptEltMapping, ScriptWitness, Transaction, TxIn, ByteVector => ByteVectorAcinq}
-import fr.acinq.eclair.{CltvExpiry, CltvExpiryDelta, KotlinUtils, LongToBtcAmount}
+import fr.acinq.bitcoin.{ByteVector => ByteVectorAcinq}
+import fr.acinq.bitcoin._
+import fr.acinq.bitcoin.SigHash._
+import fr.acinq.eclair.transactions.Transactions.{AnchorOutputsCommitmentFormat, CommitmentFormat, DefaultCommitmentFormat}
+import fr.acinq.eclair.{CltvExpiry, CltvExpiryDelta, KotlinUtils}
 
 import scala.collection.JavaConverters._
 import KotlinUtils._
@@ -28,7 +31,19 @@ import KotlinUtils._
  * Created by PM on 02/12/2016.
  */
 object Scripts {
-  def der(sig: ByteVector64): ByteVectorAcinq = Crypto.compact2der(sig).concat(1.toByte)
+
+  /**
+   * Convert a raw ECDSA signature (r,s) to a der-encoded signature that can be used in bitcoin scripts.
+   *
+   * @param sig         raw ECDSA signature (r,s)
+   * @param sighashType sighash flags
+   */
+  def der(sig: ByteVector64, sighashType: Int = SIGHASH_ALL): ByteVector = Crypto.compact2der(sig) concat sighashType.toByte
+
+  private def htlcRemoteSighash(commitmentFormat: CommitmentFormat): Int = commitmentFormat match {
+    case DefaultCommitmentFormat => SIGHASH_ALL
+    case AnchorOutputsCommitmentFormat => SIGHASH_SINGLE | SIGHASH_ANYONECANPAY
+  }
 
   def multiSig2of2(pubkey1: PublicKey, pubkey2: PublicKey): Seq[ScriptElt] =
     if (LexicographicalOrdering.isLessThan(pubkey1, pubkey2)) {
@@ -63,15 +78,6 @@ object Scripts {
     case _ => new OP_PUSHDATA(Script.encodeNumber(n))
   }
 
-  def applyFees(amount_us: Satoshi, amount_them: Satoshi, fee: Satoshi) = {
-    val (amount_us1: Satoshi, amount_them1: Satoshi) = (amount_us, amount_them) match {
-      case (us, them) if us >= fee / 2 && them >= fee / 2 => ((us minus fee) div 2, (them minus fee) div 2)
-      case (us, them) if us < fee / 2 => (0 sat, (them minus fee plus us).max(0 sat))
-      case (us, them) if them < fee / 2 => ((us minus fee plus them).max(0 sat), 0 sat)
-    }
-    (amount_us1, amount_them1)
-  }
-
   /**
    * This function interprets the locktime for the given transaction, and returns the block height before which this tx cannot be published.
    * By convention in bitcoin, depending of the value of locktime it might be a number of blocks or a number of seconds since epoch.
@@ -104,8 +110,11 @@ object Scripts {
       }
     }
 
-    if (tx.version < 2) 0
-    else tx.txIn.map(_.sequence).map(sequenceToBlockHeight).max
+    if (tx.version < 2) {
+      0
+    } else {
+      tx.txIn.map(_.sequence).map(sequenceToBlockHeight).max
+    }
   }
 
   def toLocalDelayed(revocationPubkey: PublicKey, toSelfDelay: CltvExpiryDelta, localDelayedPaymentPubkey: PublicKey) = {
@@ -138,37 +147,82 @@ object Scripts {
   def witnessToLocalDelayedWithRevocationSig(revocationSig: ByteVector64, toLocalScript: ByteVectorAcinq): ScriptWitness =
     new ScriptWitness((der(revocationSig) :: new fr.acinq.bitcoin.ByteVector("01") :: toLocalScript :: Nil).asJava)
 
-  def witnessToLocalDelayedWithRevocationSig(revocationSig: ByteVector64, toLocalScript: Array[Byte]): ScriptWitness = witnessToLocalDelayedWithRevocationSig(revocationSig, new ByteVectorAcinq(toLocalScript))
+  /**
+   * With the anchor outputs format, the to_remote output is delayed with a CSV 1 to allow CPFP carve-out on anchors.
+   */
+  def toRemoteDelayed(remotePaymentPubkey: PublicKey): Seq[ScriptElt] = {
+    new OP_PUSHDATA(remotePaymentPubkey) :: OP_CHECKSIGVERIFY.INSTANCE :: OP_1.INSTANCE :: OP_CHECKSEQUENCEVERIFY.INSTANCE :: Nil
+  }
 
-  def htlcOffered(localHtlcPubkey: PublicKey, remoteHtlcPubkey: PublicKey, revocationPubKey: PublicKey, paymentHash: Array[Byte]): Seq[ScriptElt] = {
-    List(
-      // @formatter:off
-    // To you with revocation key
-      OP_DUP.INSTANCE, OP_HASH160.INSTANCE, new OP_PUSHDATA(revocationPubKey.hash160), OP_EQUAL.INSTANCE,
-      OP_IF.INSTANCE,
-        OP_CHECKSIG.INSTANCE,
-      OP_ELSE.INSTANCE,
-        new OP_PUSHDATA(remoteHtlcPubkey), OP_SWAP.INSTANCE, OP_SIZE.INSTANCE, encodeNumber(32),  OP_EQUAL.INSTANCE,
-        OP_NOTIF.INSTANCE,
-          // To me via HTLC-timeout transaction (timelocked).
-          OP_DROP.INSTANCE, OP_2.INSTANCE, OP_SWAP.INSTANCE, new OP_PUSHDATA(localHtlcPubkey), OP_2.INSTANCE, OP_CHECKMULTISIG.INSTANCE,
-        OP_ELSE.INSTANCE,
-          OP_HASH160.INSTANCE, new OP_PUSHDATA(paymentHash),  OP_EQUALVERIFY.INSTANCE,
-          OP_CHECKSIG.INSTANCE,
-        OP_ENDIF.INSTANCE,
-      OP_ENDIF.INSTANCE
+  /**
+   * If remote publishes its commit tx where there was a to_remote delayed output (anchor outputs format), then local
+   * uses this script to claim its funds (consumes to_remote script from commit tx).
+   */
+  def witnessClaimToRemoteDelayedFromCommitTx(localSig: ByteVector64, toRemoteDelayedScript: ByteVector) =
+    new ScriptWitness(der(localSig) :: toRemoteDelayedScript :: Nil)
+
+  /**
+   * Each participant has its own anchor output that locks to their funding key. This allows using CPFP carve-out (see
+   * https://github.com/bitcoin/bitcoin/pull/15681) to speed up confirmation of a commitment transaction.
+   */
+  def anchor(fundingPubkey: PublicKey): Seq[ScriptElt] = {
+    // @formatter:off
+    new OP_PUSHDATA(fundingPubkey) :: OP_CHECKSIG.INSTANCE :: OP_IFDUP.INSTANCE ::
+    OP_NOTIF.INSTANCE ::
+      OP_16.INSTANCE :: OP_CHECKSEQUENCEVERIFY.INSTANCE ::
+    OP_ENDIF.INSTANCE :: Nil
     // @formatter:on
-    )
+  }
+
+  /**
+   * This witness script spends a local [[anchor]] output using a local sig.
+   */
+  def witnessAnchor(localSig: ByteVector64, anchorScript: ByteVector) = new ScriptWitness(der(localSig) :: anchorScript :: Nil)
+
+  /**
+   * This witness script spends either a local or remote [[anchor]] output after its CSV delay.
+   */
+  def witnessAnchorAfterDelay(anchorScript: ByteVector) = new ScriptWitness(ByteVector.empty :: anchorScript :: Nil)
+
+  def htlcOffered(localHtlcPubkey: PublicKey, remoteHtlcPubkey: PublicKey, revocationPubKey: PublicKey, paymentHash: ByteVector, commitmentFormat: CommitmentFormat): Seq[ScriptElt] = {
+    val addCsvDelay = commitmentFormat match {
+      case DefaultCommitmentFormat => false
+      case AnchorOutputsCommitmentFormat => true
+    }
+    // @formatter:off
+    // To you with revocation key
+    OP_DUP.INSTANCE :: OP_HASH160.INSTANCE :: new OP_PUSHDATA(revocationPubKey.hash160) :: OP_EQUAL.INSTANCE ::
+    OP_IF.INSTANCE ::
+        OP_CHECKSIG.INSTANCE ::
+    OP_ELSE.INSTANCE ::
+        new OP_PUSHDATA(remoteHtlcPubkey) :: OP_SWAP.INSTANCE  :: OP_SIZE.INSTANCE :: encodeNumber(32) :: OP_EQUAL.INSTANCE ::
+        OP_NOTIF.INSTANCE ::
+            // To me via HTLC-timeout transaction (timelocked).
+            OP_DROP.INSTANCE :: OP_2.INSTANCE :: OP_SWAP.INSTANCE :: new OP_PUSHDATA(localHtlcPubkey) :: OP_2.INSTANCE :: OP_CHECKMULTISIG.INSTANCE ::
+        OP_ELSE.INSTANCE ::
+            OP_HASH160.INSTANCE :: new OP_PUSHDATA(paymentHash) :: OP_EQUALVERIFY.INSTANCE ::
+            OP_CHECKSIG.INSTANCE ::
+        OP_ENDIF.INSTANCE ::
+    (if (addCsvDelay) {
+        OP_1.INSTANCE :: OP_CHECKSEQUENCEVERIFY.INSTANCE :: OP_DROP.INSTANCE ::
+    OP_ENDIF.INSTANCE :: Nil
+    } else {
+    OP_ENDIF.INSTANCE :: Nil
+    })
+    // @formatter:on
   }
 
   /**
    * This is the witness script of the 2nd-stage HTLC Success transaction (consumes htlcOffered script from commit tx)
    */
-  def witnessHtlcSuccess(localSig: ByteVector64, remoteSig: ByteVector64, paymentPreimage: ByteVector32, htlcOfferedScript: ByteVectorAcinq): ScriptWitness =
-    new ScriptWitness((fr.acinq.bitcoin.ByteVector.empty :: der(remoteSig) :: der(localSig) :: paymentPreimage :: htlcOfferedScript :: Nil).asJava)
+  def witnessHtlcSuccess(localSig: ByteVector64, remoteSig: ByteVector64, paymentPreimage: ByteVector32, htlcOfferedScript: ByteVector, commitmentFormat: CommitmentFormat): ScriptWitness =
+    new ScriptWitness(ByteVector.empty :: der(remoteSig, htlcRemoteSighash(commitmentFormat)) :: der(localSig) :: paymentPreimage :: htlcOfferedScript :: Nil)
 
-  def witnessHtlcSuccess(localSig: ByteVector64, remoteSig: ByteVector64, paymentPreimage: ByteVector32, htlcOfferedScript: Array[Byte]): ScriptWitness =
-    witnessHtlcSuccess(localSig, remoteSig, paymentPreimage,  new ByteVectorAcinq(htlcOfferedScript))
+  def witnessHtlcSuccess(localSig: ByteVector64, remoteSig: ByteVector64, paymentPreimage: ByteVector32, htlcOfferedScript: Array[Byte], commitmentFormat: CommitmentFormat): ScriptWitness =
+    witnessHtlcSuccess(localSig, remoteSig, paymentPreimage,  new ByteVectorAcinq(htlcOfferedScript), commitmentFormat)
+
+  def witnessHtlcSuccess(localSig: ByteVector64, remoteSig: ByteVector64, paymentPreimage: ByteVector32, htlcOfferedScript: scodec.bits.ByteVector, commitmentFormat: CommitmentFormat): ScriptWitness =
+    witnessHtlcSuccess(localSig, remoteSig, paymentPreimage,  htlcOfferedScript.toArray, commitmentFormat)
 
   /** Extract the payment preimage from a 2nd-stage HTLC Success transaction's witness script */
   def extractPreimageFromHtlcSuccess: PartialFunction[ScriptWitness, ByteVector32] = {
@@ -185,41 +239,49 @@ object Scripts {
   def witnessClaimHtlcSuccessFromCommitTx(localSig: ByteVector64, paymentPreimage: ByteVector32, htlcOffered: Array[Byte]): ScriptWitness =
     witnessClaimHtlcSuccessFromCommitTx(localSig, paymentPreimage, new ByteVectorAcinq(htlcOffered))
 
+  def witnessClaimHtlcSuccessFromCommitTx(localSig: ByteVector64, paymentPreimage: ByteVector32, htlcOffered: scodec.bits.ByteVector): ScriptWitness =
+    witnessClaimHtlcSuccessFromCommitTx(localSig, paymentPreimage, htlcOffered.toArray)
+
   /** Extract the payment preimage from from a fulfilled offered htlc. */
   def extractPreimageFromClaimHtlcSuccess: PartialFunction[ScriptWitness, ByteVector32] = {
     case witness: ScriptWitness if witness.stack.size() == 3 && witness.stack.get(1).size() == 32 => new ByteVector32(witness.stack.get(1))
   }
 
-  def htlcReceived(localHtlcPubkey: PublicKey, remoteHtlcPubkey: PublicKey, revocationPubKey: PublicKey, paymentHash: Array[Byte], lockTime: CltvExpiry): List[ScriptElt] = {
-    List(
-      // @formatter:off
-      OP_DUP.INSTANCE, OP_HASH160.INSTANCE, (new OP_PUSHDATA(revocationPubKey.hash160)), OP_EQUAL.INSTANCE,
-      OP_IF.INSTANCE,
-        OP_CHECKSIG.INSTANCE,
-      OP_ELSE.INSTANCE,
-        (new OP_PUSHDATA(remoteHtlcPubkey)), OP_SWAP.INSTANCE, OP_SIZE.INSTANCE, encodeNumber(32), OP_EQUAL.INSTANCE,
-        OP_IF.INSTANCE,
-        // To me via HTLC-success transaction.
-          OP_HASH160.INSTANCE, (new OP_PUSHDATA(paymentHash)), OP_EQUALVERIFY.INSTANCE,
-          OP_2.INSTANCE, OP_SWAP.INSTANCE, (new OP_PUSHDATA(localHtlcPubkey)), OP_2.INSTANCE, OP_CHECKMULTISIG.INSTANCE,
-        OP_ELSE.INSTANCE,
-        // To you after timeout.
-          OP_DROP.INSTANCE, encodeNumber(lockTime.toLong), OP_CHECKLOCKTIMEVERIFY.INSTANCE, OP_DROP.INSTANCE,
-          OP_CHECKSIG.INSTANCE,
-        OP_ENDIF.INSTANCE,
-      OP_ENDIF.INSTANCE
+  def htlcReceived(localHtlcPubkey: PublicKey, remoteHtlcPubkey: PublicKey, revocationPubKey: PublicKey, paymentHash: ByteVector, lockTime: CltvExpiry, commitmentFormat: CommitmentFormat): Seq[ScriptElt] = {
+    val addCsvDelay = commitmentFormat match {
+      case DefaultCommitmentFormat => false
+      case AnchorOutputsCommitmentFormat => true
+    }
+    // @formatter:off
+    // To you with revocation key
+    OP_DUP.INSTANCE :: OP_HASH160.INSTANCE :: new OP_PUSHDATA(revocationPubKey.hash160) :: OP_EQUAL.INSTANCE ::
+    OP_IF.INSTANCE ::
+        OP_CHECKSIG.INSTANCE ::
+    OP_ELSE.INSTANCE ::
+        new OP_PUSHDATA(remoteHtlcPubkey) :: OP_SWAP.INSTANCE :: OP_SIZE.INSTANCE :: encodeNumber(32) :: OP_EQUAL.INSTANCE ::
+        OP_IF.INSTANCE ::
+            // To me via HTLC-success transaction.
+            OP_HASH160.INSTANCE :: new OP_PUSHDATA(paymentHash) :: OP_EQUALVERIFY.INSTANCE ::
+            OP_2.INSTANCE :: OP_SWAP.INSTANCE :: new OP_PUSHDATA(localHtlcPubkey) :: OP_2.INSTANCE :: OP_CHECKMULTISIG.INSTANCE ::
+        OP_ELSE.INSTANCE ::
+            // To you after timeout.
+            OP_DROP.INSTANCE :: encodeNumber(lockTime.toLong) :: OP_CHECKLOCKTIMEVERIFY.INSTANCE :: OP_DROP.INSTANCE ::
+            OP_CHECKSIG.INSTANCE ::
+        OP_ENDIF.INSTANCE ::
+    (if (addCsvDelay) {
+        OP_1.INSTANCE :: OP_CHECKSEQUENCEVERIFY.INSTANCE :: OP_DROP.INSTANCE ::
+    OP_ENDIF.INSTANCE :: Nil
+    } else {
+    OP_ENDIF.INSTANCE :: Nil
+    })
     // @formatter:on
-    )
   }
 
   /**
    * This is the witness script of the 2nd-stage HTLC Timeout transaction (consumes htlcOffered script from commit tx)
    */
-  def witnessHtlcTimeout(localSig: ByteVector64, remoteSig: ByteVector64, htlcOfferedScript: ByteVectorAcinq): ScriptWitness =
-    new ScriptWitness((ByteVectorAcinq.empty :: der(remoteSig) :: der(localSig) :: ByteVectorAcinq.empty :: htlcOfferedScript :: Nil).asJava)
-
-  def witnessHtlcTimeout(localSig: ByteVector64, remoteSig: ByteVector64, htlcOfferedScript: Array[Byte]): ScriptWitness =
-    witnessHtlcTimeout(localSig, remoteSig, new ByteVectorAcinq(htlcOfferedScript))
+  def witnessHtlcTimeout(localSig: ByteVector64, remoteSig: ByteVector64, htlcOfferedScript: ByteVector, commitmentFormat: CommitmentFormat) =
+    new ScriptWitness(ByteVector.empty :: der(remoteSig, htlcRemoteSighash(commitmentFormat)) :: der(localSig) :: ByteVector.empty :: htlcOfferedScript :: Nil)
 
   /** Extract the payment hash from a 2nd-stage HTLC Timeout transaction's witness script */
   def extractPaymentHashFromHtlcTimeout: PartialFunction[ScriptWitness, ByteVectorAcinq] = {
