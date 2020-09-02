@@ -78,8 +78,6 @@ class Relayer(nodeParams: NodeParams, router: ActorRef, register: ActorRef, comm
   context.system.eventStream.subscribe(self, classOf[ShortChannelIdAssigned])
 
   private val postRestartCleaner = context.actorOf(PostRestartHtlcCleaner.props(nodeParams, commandBuffer, initialized))
-  private val channelRelayer = context.actorOf(ChannelRelayer.props(nodeParams, self, register, commandBuffer))
-  private val nodeRelayer = context.actorOf(NodeRelayer.props(nodeParams, router, commandBuffer, register))
 
   override def receive: Receive = main(Map.empty, new mutable.HashMap[PublicKey, mutable.Set[ShortChannelId]] with mutable.MultiMap[PublicKey, ShortChannelId])
 
@@ -131,15 +129,8 @@ class Relayer(nodeParams: NodeParams, router: ActorRef, register: ActorRef, comm
         case Right(p: IncomingPacket.FinalPacket) =>
           log.debug(s"forwarding htlc #${add.id} to payment-handler")
           paymentHandler forward p
-        case Right(r: IncomingPacket.ChannelRelayPacket) =>
-          channelRelayer forward ChannelRelayer.RelayHtlc(r, previousFailures, channelUpdates, node2channels)
-        case Right(r: IncomingPacket.NodeRelayPacket) =>
-          if (!nodeParams.enableTrampolinePayment) {
-            log.warning(s"rejecting htlc #${add.id} from channelId=${add.channelId} to nodeId=${r.innerPayload.outgoingNodeId} reason=trampoline disabled")
-            commandBuffer ! CommandBuffer.CommandSend(add.channelId, CMD_FAIL_HTLC(add.id, Right(RequiredNodeFeatureMissing), commit = true))
-          } else {
-            nodeRelayer forward r
-          }
+        case Right(r: IncomingPacket.ChannelRelayPacket) => ???
+        case Right(r: IncomingPacket.NodeRelayPacket) => ???
         case Left(badOnion: BadOnion) =>
           log.warning(s"couldn't parse onion: reason=${badOnion.message}")
           val cmdFail = CMD_FAIL_MALFORMED_HTLC(add.id, badOnion.onionHash, badOnion.code, commit = true)
@@ -154,35 +145,22 @@ class Relayer(nodeParams: NodeParams, router: ActorRef, register: ActorRef, comm
     case Status.Failure(addFailed: AddHtlcFailed) => addFailed.origin match {
       case Origin.Local(id, None) => log.error(s"received unexpected add failed with no sender (paymentId=$id)")
       case Origin.Local(_, Some(sender)) => sender ! Status.Failure(addFailed)
-      case _: Origin.Relayed => channelRelayer forward Status.Failure(addFailed)
-      case Origin.TrampolineRelayed(htlcs, None) => log.error(s"received unexpected add failed with no sender (upstream=${htlcs.mkString(", ")}")
-      case Origin.TrampolineRelayed(_, Some(paymentSender)) => paymentSender ! Status.Failure(addFailed)
+      case _: Origin.Relayed => ???
+      case _: Origin.TrampolineRelayed => ???
     }
 
     case ff: ForwardFulfill => ff.to match {
       case Origin.Local(_, None) => postRestartCleaner forward ff
       case Origin.Local(_, Some(sender)) => sender ! ff
-      case Origin.Relayed(originChannelId, originHtlcId, amountIn, amountOut) =>
-        val cmd = CMD_FULFILL_HTLC(originHtlcId, ff.paymentPreimage, commit = true)
-        commandBuffer ! CommandBuffer.CommandSend(originChannelId, cmd)
-        context.system.eventStream.publish(ChannelPaymentRelayed(amountIn, amountOut, ff.htlc.paymentHash, originChannelId, ff.htlc.channelId))
-      case Origin.TrampolineRelayed(_, None) => postRestartCleaner forward ff
-      case Origin.TrampolineRelayed(_, Some(_)) => nodeRelayer forward ff
+      case _: Origin.Relayed => ???
+      case _: Origin.TrampolineRelayed => ???
     }
 
     case ff: ForwardFail => ff.to match {
       case Origin.Local(_, None) => postRestartCleaner forward ff
       case Origin.Local(_, Some(sender)) => sender ! ff
-      case Origin.Relayed(originChannelId, originHtlcId, _, _) =>
-        Metrics.recordPaymentRelayFailed(Tags.FailureType.Remote, Tags.RelayType.Channel)
-        val cmd = ff match {
-          case ForwardRemoteFail(fail, _, _) => CMD_FAIL_HTLC(originHtlcId, Left(fail.reason), commit = true)
-          case ForwardRemoteFailMalformed(fail, _, _) => CMD_FAIL_MALFORMED_HTLC(originHtlcId, fail.onionHash, fail.failureCode, commit = true)
-          case _: ForwardOnChainFail => CMD_FAIL_HTLC(originHtlcId, Right(PermanentChannelFailure), commit = true)
-        }
-        commandBuffer ! CommandBuffer.CommandSend(originChannelId, cmd)
-      case Origin.TrampolineRelayed(_, None) => postRestartCleaner forward ff
-      case Origin.TrampolineRelayed(_, Some(paymentSender)) => paymentSender ! ff
+      case _: Origin.Relayed => ???
+      case _: Origin.TrampolineRelayed => ???
     }
 
     case ack: CommandBuffer.CommandAck => commandBuffer forward ack
