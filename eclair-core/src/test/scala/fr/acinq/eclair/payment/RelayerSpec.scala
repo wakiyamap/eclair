@@ -544,7 +544,7 @@ class RelayerSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike {
 
     // We simulate a fake htlc fulfill for the downstream channel.
     val add_bc = UpdateAddHtlc(channelId_bc, 72, 1000 msat, paymentHash, CltvExpiry(1), null)
-    val forwardFulfill: RES_ADD_COMPLETED[Origin[Upstream], HtlcResult.Fulfill] = if (onChain) {
+    val forwardFulfill: RES_ADD_COMPLETED[Origin, HtlcResult.Fulfill] = if (onChain) {
       RES_ADD_COMPLETED(cmd1.origin, add_bc, HtlcResult.OnChainFulfill(preimage))
     } else {
       RES_ADD_COMPLETED(cmd1.origin, add_bc, HtlcResult.RemoteFulfill(UpdateFulfillHtlc(add_bc.channelId, add_bc.id, preimage)))
