@@ -45,7 +45,7 @@ import scala.concurrent.Promise
  * It also receives channel HTLC events (fulfill / failed) and relays those to the appropriate handlers.
  * It also maintains an up-to-date view of local channel balances.
  */
-class Relayer(nodeParams: NodeParams, router: ActorRef, register: ActorRef, paymentHandler: ActorRef, initialized: Option[Promise[Done]] = None) extends Actor with DiagnosticActorLogging {
+class Relayer(nodeParams: NodeParams, router: ActorRef, register: ActorRef, paymentHandler: ActorRef) extends Actor with DiagnosticActorLogging {
 
   import Relayer._
 
@@ -57,7 +57,6 @@ class Relayer(nodeParams: NodeParams, router: ActorRef, register: ActorRef, paym
   context.system.eventStream.subscribe(self, classOf[AvailableBalanceChanged])
   context.system.eventStream.subscribe(self, classOf[ShortChannelIdAssigned])
 
-  private val postRestartCleaner = context.actorOf(PostRestartHtlcCleaner.props(nodeParams, register, initialized), "post-restart-htlc-cleaner")
   private val channelRelayer = context.actorOf(ChannelRelayer.props(nodeParams, self, register), "channel-relayer")
   private val nodeRelayer = context.actorOf(NodeRelayer.props(nodeParams, router, register), "node-relayer")
 
@@ -128,14 +127,9 @@ class Relayer(nodeParams: NodeParams, router: ActorRef, register: ActorRef, paym
           PendingRelayDb.safeSend(register, nodeParams.db.pendingRelay, add.channelId, cmdFail)
       }
 
-    case r: RES_ADD_SETTLED[_, _] => r.origin match {
-      case _: Origin.Cold => postRestartCleaner ! r
-      case o: Origin.Hot => o.replyTo ! r
-    }
-
     case _: RES_SUCCESS[_] => () // ignoring responses from channels
 
-    case GetChildActors(replyTo) => replyTo ! ChildActors(postRestartCleaner, channelRelayer, nodeRelayer)
+    case GetChildActors(replyTo) => replyTo ! ChildActors(channelRelayer, nodeRelayer)
   }
 
   override def mdc(currentMessage: Any): MDC = {
@@ -152,8 +146,8 @@ class Relayer(nodeParams: NodeParams, router: ActorRef, register: ActorRef, paym
 
 object Relayer extends Logging {
 
-  def props(nodeParams: NodeParams, router: ActorRef, register: ActorRef, paymentHandler: ActorRef, initialized: Option[Promise[Done]] = None): Props =
-    Props(new Relayer(nodeParams, router, register, paymentHandler, initialized))
+  def props(nodeParams: NodeParams, router: ActorRef, register: ActorRef, paymentHandler: ActorRef): Props =
+    Props(new Relayer(nodeParams, router, register, paymentHandler))
 
   type ChannelUpdates = Map[ShortChannelId, OutgoingChannel]
   type NodeChannels = mutable.MultiDict[PublicKey, ShortChannelId]
@@ -180,7 +174,7 @@ object Relayer extends Logging {
 
   // internal classes, used for testing
   private[payment] case class GetChildActors(replyTo: ActorRef)
-  private[payment] case class ChildActors(postRestartCleaner: ActorRef, channelRelayer: ActorRef, nodeRelayer: ActorRef)
+  private[payment] case class ChildActors(channelRelayer: ActorRef, nodeRelayer: ActorRef)
   // @formatter:on
 
 }
