@@ -36,7 +36,7 @@ import fr.acinq.eclair.router.Announcements
 import fr.acinq.eclair.transactions.DirectedHtlc.{incoming, outgoing}
 import fr.acinq.eclair.transactions.Transactions
 import fr.acinq.eclair.transactions.Transactions.{DefaultCommitmentFormat, HtlcSuccessTx, weight2fee}
-import fr.acinq.eclair.wire.{AnnouncementSignatures, ChannelUpdate, ClosingSigned, CommitSig, Error, FailureMessageCodecs, PermanentChannelFailure, RevokeAndAck, Shutdown, UpdateAddHtlc, UpdateFailHtlc, UpdateFailMalformedHtlc, UpdateFee, UpdateFulfillHtlc}
+import fr.acinq.eclair.wire.{AnnouncementSignatures, ChannelReestablish, ChannelUpdate, ClosingSigned, CommitSig, Error, FailureMessageCodecs, PermanentChannelFailure, RevokeAndAck, Shutdown, UpdateAddHtlc, UpdateFailHtlc, UpdateFailMalformedHtlc, UpdateFee, UpdateFulfillHtlc}
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
 import org.scalatest.{Outcome, Tag}
 import scodec.bits._
@@ -62,6 +62,77 @@ class NormalStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with 
       awaitCond(bob.stateName == NORMAL)
       withFixture(test.toNoArgTest(setup))
     }
+  }
+
+  test("message ordering on reestablish") { f =>
+    import f._
+
+    // A            B
+    //  <---add-----
+    //  ----add---->
+    //  <---sig-----
+    //  ----rev----x
+    //  ----sig----x
+
+    // Suggestion: in the spec, we may simply want to enrich:
+    // if next_revocation_number is equal to the commitment number of the last revoke_and_ack the receiving node sent, AND the receiving node hasn't already received a closing_signed:
+    //    - MUST re-send the revoke_and_ack.
+    // by saying that revoked_and_ack must be sent before any commit_sig?
+
+    val sender = TestProbe()
+
+    // Bob -> Alice
+    {
+      val add = CMD_ADD_HTLC(sender.ref, 30000000 msat, randomBytes32, CltvExpiryDelta(144).toCltvExpiry(currentBlockHeight), TestConstants.emptyOnionPacket, localOrigin(sender.ref))
+      bob ! add
+      sender.expectMsgType[RES_SUCCESS[CMD_ADD_HTLC]]
+      val htlc = bob2alice.expectMsgType[UpdateAddHtlc]
+      bob2alice.forward(alice, htlc)
+    }
+
+    // Alice -> Bob
+    {
+      val add = CMD_ADD_HTLC(sender.ref, 40000000 msat, randomBytes32, CltvExpiryDelta(144).toCltvExpiry(currentBlockHeight), TestConstants.emptyOnionPacket, localOrigin(sender.ref))
+      alice ! add
+      sender.expectMsgType[RES_SUCCESS[CMD_ADD_HTLC]]
+      val htlc = alice2bob.expectMsgType[UpdateAddHtlc]
+      alice2bob.forward(bob, htlc)
+    }
+
+    bob ! CMD_SIGN()
+    val sigB = bob2alice.expectMsgType[CommitSig]
+    bob2alice.forward(alice, sigB)
+
+    // Assume the other messages are lost.
+    alice2bob.expectMsgType[RevokeAndAck]
+    alice2bob.expectMsgType[CommitSig]
+
+    // Simulate a reconnect:
+    alice ! INPUT_DISCONNECTED
+    bob ! INPUT_DISCONNECTED
+    awaitCond(alice.stateName == OFFLINE && bob.stateName == OFFLINE)
+    alice ! INPUT_RECONNECTED(sender.ref, wire.Init(Features(hex"028a8a")), wire.Init(Features(hex"028a8a")))
+    val reestablishA = alice2bob.expectMsgType[ChannelReestablish]
+    assert(reestablishA.nextLocalCommitmentNumber == 2)
+    assert(reestablishA.nextRemoteRevocationNumber == 0)
+    bob ! INPUT_RECONNECTED(sender.ref, wire.Init(Features(hex"028a8a")), wire.Init(Features(hex"028a8a")))
+    val reestablishB = bob2alice.expectMsgType[ChannelReestablish]
+    assert(reestablishB.nextLocalCommitmentNumber == 1)
+    assert(reestablishB.nextRemoteRevocationNumber == 0)
+
+    bob2alice.forward(alice, reestablishB)
+    val revA = alice2bob.expectMsgType[RevokeAndAck]
+    val htlcA = alice2bob.expectMsgType[UpdateAddHtlc]
+    val sigA = alice2bob.expectMsgType[CommitSig]
+
+    alice2bob.forward(bob, reestablishA)
+    // TODO: here we can play with the order of messages: if we send sigA before revA, Bob will fail the channel.
+    alice2bob.forward(bob, htlcA)
+    alice2bob.forward(bob, revA)
+    alice2bob.forward(bob, sigA)
+
+    // This shows Bob is ok with the changes? Maybe additional checks?
+    bob2alice.expectMsgType[RevokeAndAck]
   }
 
   test("recv CMD_ADD_HTLC (empty origin)") { f =>
