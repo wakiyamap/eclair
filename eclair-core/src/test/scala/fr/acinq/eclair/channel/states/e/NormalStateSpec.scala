@@ -71,8 +71,8 @@ class NormalStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with 
     //  <---add-----
     //  ----add---->
     //  <---sig-----
+    //  ----sig----x (sent before receiving Bob's sig, contains only one sig)
     //  ----rev----x
-    //  ----sig----x
 
     // Suggestion: in the spec, we may simply want to enrich:
     // if next_revocation_number is equal to the commitment number of the last revoke_and_ack the receiving node sent, AND the receiving node hasn't already received a closing_signed:
@@ -82,30 +82,35 @@ class NormalStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with 
     val sender = TestProbe()
 
     // Bob -> Alice
-    {
+    val htlcB = {
       val add = CMD_ADD_HTLC(sender.ref, 30000000 msat, randomBytes32, CltvExpiryDelta(144).toCltvExpiry(currentBlockHeight), TestConstants.emptyOnionPacket, localOrigin(sender.ref))
       bob ! add
       sender.expectMsgType[RES_SUCCESS[CMD_ADD_HTLC]]
-      val htlc = bob2alice.expectMsgType[UpdateAddHtlc]
-      bob2alice.forward(alice, htlc)
+      bob2alice.expectMsgType[UpdateAddHtlc]
     }
 
     // Alice -> Bob
-    {
+    val htlcA = {
       val add = CMD_ADD_HTLC(sender.ref, 40000000 msat, randomBytes32, CltvExpiryDelta(144).toCltvExpiry(currentBlockHeight), TestConstants.emptyOnionPacket, localOrigin(sender.ref))
       alice ! add
       sender.expectMsgType[RES_SUCCESS[CMD_ADD_HTLC]]
+      alice ! CMD_SIGN()
       val htlc = alice2bob.expectMsgType[UpdateAddHtlc]
-      alice2bob.forward(bob, htlc)
+      alice2bob.expectMsgType[CommitSig] // this one is lost
+      htlc
     }
+
+    bob2alice.forward(alice, htlcB)
+    alice2bob.forward(bob, htlcA)
 
     bob ! CMD_SIGN()
     val sigB = bob2alice.expectMsgType[CommitSig]
+    assert(sigB.htlcSignatures.length == 1)
     bob2alice.forward(alice, sigB)
 
     // Assume the other messages are lost.
     alice2bob.expectMsgType[RevokeAndAck]
-    alice2bob.expectMsgType[CommitSig]
+    alice2bob.expectNoMsg(1 second)
 
     // Simulate a reconnect:
     alice ! INPUT_DISCONNECTED
@@ -121,15 +126,16 @@ class NormalStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with 
     assert(reestablishB.nextRemoteRevocationNumber == 0)
 
     bob2alice.forward(alice, reestablishB)
-    val revA = alice2bob.expectMsgType[RevokeAndAck]
-    val htlcA = alice2bob.expectMsgType[UpdateAddHtlc]
+    alice2bob.expectMsg(htlcA)
     val sigA = alice2bob.expectMsgType[CommitSig]
+    assert(sigA.htlcSignatures.length == 1)
+    val revA = alice2bob.expectMsgType[RevokeAndAck]
 
     alice2bob.forward(bob, reestablishA)
     // TODO: here we can play with the order of messages: if we send sigA before revA, Bob will fail the channel.
     alice2bob.forward(bob, htlcA)
-    alice2bob.forward(bob, revA)
     alice2bob.forward(bob, sigA)
+    alice2bob.forward(bob, revA)
 
     // This shows Bob is ok with the changes? Maybe additional checks?
     bob2alice.expectMsgType[RevokeAndAck]
