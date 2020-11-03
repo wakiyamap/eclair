@@ -24,5 +24,5 @@ blocks:
             - sem-version java 11
             - checkout
             - cache restore maven
-            - mvn test
+            - mvnw test
             - cache store maven .m2
