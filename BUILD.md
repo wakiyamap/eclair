@@ -3,7 +3,6 @@
 ## Requirements
 
 - [OpenJDK 11](https://adoptopenjdk.net/?variant=openjdk11&jvmVariant=hotspot).
-- [Maven](https://maven.apache.org/download.cgi) 3.6.0 or newer
 - [Docker](https://www.docker.com/) 18.03 or newer (optional) if you want to run all tests
 
 ## Build
@@ -15,12 +14,12 @@ that we release, you must use the build environment (OS, JDK, maven...) that we 
 To build the project and run the tests, simply run:
 
 ```shell
-mvn package
+mvnw package
 ```
 
 Notes:
 - This command will build all modules (core, node, gui).
-- If the build fails, you may need to clean previously built artifacts with the `mvn clean` command.
+- If the build fails, you may need to clean previously built artifacts with the `mvnw clean` command.
 - Some of the tests use [Docker](https://www.docker.com/), so make sure your docker daemon is running.
 - Archives can be found in the `target` folder for each module.
 
@@ -29,13 +28,13 @@ Notes:
 Running tests takes time. If you want to skip them, use `-DskipTests`:
 
 ```shell
-mvn package -DskipTests
+mvnw package -DskipTests
 ```
 
 You can even skip the tests compilation with `maven.test.skip`:
 
 ```shell
-mvn package -Dmaven.test.skip=true
+mvnw package -Dmaven.test.skip=true
 ```
 
 ### Run tests
@@ -43,13 +42,13 @@ mvn package -Dmaven.test.skip=true
 To only run the tests, run:
 
 ```shell
-mvn test
+mvnw test
 ```
 
 To run tests for a specific class, run:
 
 ```shell
-mvn test -Dsuites=*<TestClassName>
+mvnw test -Dsuites=*<TestClassName>
 ```
 
 ### Build specific module
@@ -57,13 +56,13 @@ mvn test -Dsuites=*<TestClassName>
 To only build the `eclair-node` module, run:
 
 ```shell
-mvn package -pl eclair-node -am -Dmaven.test.skip=true
+mvnw package -pl eclair-node -am -Dmaven.test.skip=true
 ```
 
 To install `eclair-core` into your local maven repository and use it in another project, run:
 
 ```shell
-mvn clean install -pl eclair-core -am -Dmaven.test.skip=true
+mvnw clean install -pl eclair-core -am -Dmaven.test.skip=true
 ```
 
 ## Build the API documentation
