@@ -51,6 +51,7 @@ import scodec.bits.ByteVector
 
 import scala.concurrent._
 import scala.concurrent.duration._
+import scala.util.Random
 
 /**
  * Setup eclair from a data directory.
@@ -198,15 +199,22 @@ class Setup(datadir: File,
             logger.info(s"starting with feerates previously stored in db: feeratesPerKB=$feeratesPerKB")
             setFeerates(feerates, feeratesRetrieved)
           }
-          new DbFeeProvider(
-            db,
-            new FallbackFeeProvider(
-              new SmoothFeeProvider(new BitgoFeeProvider(nodeParams.chainHash, readTimeout), smoothFeerateWindow) ::
-                new SmoothFeeProvider(new EarnDotComFeeProvider(readTimeout), smoothFeerateWindow) :: Nil, // order matters!
-              minFeeratePerByte)
-          )
+          new FeeProvider {
+            /** return random fees for fuzzy testing */
+            override def getFeerates: Future[FeeratesPerKB] = {
+              Future.successful(FeeratesPerKB(
+                block_1 = Random.nextInt(1000) * 1024,
+                blocks_2 = Random.nextInt(1000) * 1024,
+                blocks_6 = Random.nextInt(1000) * 1024,
+                blocks_12 = Random.nextInt(1000) * 1024,
+                blocks_36 = Random.nextInt(1000) * 1024,
+                blocks_72 = Random.nextInt(1000) * 1024,
+                blocks_144 = Random.nextInt(1000) * 1024
+              ))
+            }
+          }
       }
-      _ = system.scheduler.schedule(0 seconds, 10 minutes)(feeProvider.getFeerates.map(feerates => setFeerates(feerates, feeratesRetrieved)))
+      _ = system.scheduler.schedule(0 seconds, 10 seconds)(feeProvider.getFeerates.map(feerates => setFeerates(feerates, feeratesRetrieved)))
       _ <- feeratesRetrieved.future // if we're using a db fee provider and we already had stored a feerate, then the promise will already be completed
 
       watcher = bitcoin match {
