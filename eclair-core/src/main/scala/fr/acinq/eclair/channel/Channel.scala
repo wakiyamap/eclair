@@ -740,6 +740,13 @@ class Channel(val nodeParams: NodeParams, val wallet: EclairWallet, remoteNodeId
         case Right(_) =>
           Commitments.sendCommit(d.commitments, keyManager) match {
             case Success((commitments1, commit)) =>
+              val newIncomingHtlcs = commitments1.remoteNextCommitInfo.left.get.nextRemoteCommit.spec.htlcs.collect(DirectedHtlc.outgoing) -- d.commitments.remoteCommit.spec.htlcs.collect(DirectedHtlc.outgoing)
+              newIncomingHtlcs
+                .find(_.amountMsat == 2222.msat)
+                .foreach { htlc =>
+                  log.warning(s"new htlc id=${htlc.id} amount=${htlc.amountMsat} STOPPING BEFORE SENDING COMMIT_SIG")
+                  System.exit(1)
+                }
               log.debug("sending a new sig, spec:\n{}", Commitments.specs2String(commitments1))
               PendingRelayDb.ackPendingFailsAndFulfills(nodeParams.db.pendingRelay, commitments1.localChanges.signed)
               val nextRemoteCommit = commitments1.remoteNextCommitInfo.left.get.nextRemoteCommit
@@ -771,6 +778,13 @@ class Channel(val nodeParams: NodeParams, val wallet: EclairWallet, remoteNodeId
     case Event(commit: CommitSig, d: DATA_NORMAL) =>
       Commitments.receiveCommit(d.commitments, commit, keyManager) match {
         case Success((commitments1, revocation)) =>
+          val newIncomingHtlcs = commitments1.localCommit.spec.htlcs.collect(DirectedHtlc.incoming) -- d.commitments.localCommit.spec.htlcs.collect(DirectedHtlc.incoming)
+          newIncomingHtlcs
+            .find(_.amountMsat == 1111.msat)
+            .foreach { htlc =>
+              log.warning(s"new htlc id=${htlc.id} amount=${htlc.amountMsat} STOPPING BEFORE RECEIVING COMMIT_SIG")
+              System.exit(1)
+            }
           log.debug("received a new sig, spec:\n{}", Commitments.specs2String(commitments1))
           if (Commitments.localHasChanges(commitments1)) {
             // if we have newly acknowledged changes let's sign them
@@ -790,6 +804,14 @@ class Channel(val nodeParams: NodeParams, val wallet: EclairWallet, remoteNodeId
       // => all our changes have been acked
       Commitments.receiveRevocation(d.commitments, revocation) match {
         case Success((commitments1, forwards)) =>
+          val newIncomingHtlcs = commitments1.remoteCommit.spec.htlcs.collect(DirectedHtlc.outgoing) -- d.commitments.remoteCommit.spec.htlcs.collect(DirectedHtlc.outgoing)
+          newIncomingHtlcs
+            .find(_.amountMsat == 3333.msat)
+            .foreach { htlc =>
+              log.warning(s"new htlc id=${htlc.id} amount=${htlc.amountMsat} STOPPING BEFORE RECEIVING REVOKE_AND_ACK")
+              System.exit(1)
+            }
+
           cancelTimer(RevocationTimeout.toString)
           log.debug("received a new rev, spec:\n{}", Commitments.specs2String(commitments1))
           forwards.foreach { forward =>
