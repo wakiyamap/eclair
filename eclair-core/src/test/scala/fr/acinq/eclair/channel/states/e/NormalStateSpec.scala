@@ -18,8 +18,7 @@ package fr.acinq.eclair.channel.states.e
 
 import akka.actor.ActorRef
 import akka.testkit.TestProbe
-import fr.acinq.bitcoin.Crypto.PrivateKey
-import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, SatoshiLong, ScriptFlags, Transaction}
+import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, PrivateKey, Satoshi, SatoshiLong, ScriptFlags, Transaction}
 import fr.acinq.eclair.Features.StaticRemoteKey
 import fr.acinq.eclair.TestConstants.{Alice, Bob}
 import fr.acinq.eclair.UInt64.Conversions._
@@ -38,6 +37,7 @@ import fr.acinq.eclair.transactions.DirectedHtlc.{incoming, outgoing}
 import fr.acinq.eclair.transactions.Transactions
 import fr.acinq.eclair.transactions.Transactions.{DefaultCommitmentFormat, HtlcSuccessTx, weight2fee}
 import fr.acinq.eclair.wire.{AnnouncementSignatures, ChannelUpdate, ClosingSigned, CommitSig, Error, FailureMessageCodecs, PermanentChannelFailure, RevokeAndAck, Shutdown, UpdateAddHtlc, UpdateFailHtlc, UpdateFailMalformedHtlc, UpdateFee, UpdateFulfillHtlc}
+import KotlinUtils._
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
 import org.scalatest.{Outcome, Tag}
 import scodec.bits._
@@ -479,7 +479,7 @@ class NormalStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with 
     val htlc = UpdateAddHtlc(ByteVector32.Zeroes, 0, MilliSatoshi(Long.MaxValue), randomBytes32, CltvExpiryDelta(144).toCltvExpiry(currentBlockHeight), TestConstants.emptyOnionPacket)
     alice2bob.forward(bob, htlc)
     val error = bob2alice.expectMsgType[Error]
-    assert(new String(error.data.toArray) === InsufficientFunds(channelId(bob), amount = MilliSatoshi(Long.MaxValue), missing = 9223372036083735L sat, reserve = 20000 sat, fees = 8960 sat).getMessage)
+    assert(new String(error.data.toArray) === InsufficientFunds(channelId(bob), amount = MilliSatoshi(Long.MaxValue), missing = new Satoshi(9223372036083735L), reserve = 20000 sat, fees = 8960 sat).getMessage)
     awaitCond(bob.stateName == CLOSING)
     // channel should be advertised as down
     assert(channelUpdateListener.expectMsgType[LocalChannelDown].channelId === bob.stateData.asInstanceOf[DATA_CLOSING].channelId)
@@ -615,14 +615,14 @@ class NormalStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with 
     assert(Alice.nodeParams.dustLimit > Bob.nodeParams.dustLimit)
     // we're gonna exchange two htlcs in each direction, the goal is to have bob's commitment have 4 htlcs, and alice's
     // commitment only have 3. We will then check that alice indeed persisted 4 htlcs, and bob only 3.
-    val aliceMinReceive = Alice.nodeParams.dustLimit + weight2fee(TestConstants.feeratePerKw, DefaultCommitmentFormat.htlcSuccessWeight)
-    val aliceMinOffer = Alice.nodeParams.dustLimit + weight2fee(TestConstants.feeratePerKw, DefaultCommitmentFormat.htlcTimeoutWeight)
-    val bobMinReceive = Bob.nodeParams.dustLimit + weight2fee(TestConstants.feeratePerKw, DefaultCommitmentFormat.htlcSuccessWeight)
-    val bobMinOffer = Bob.nodeParams.dustLimit + weight2fee(TestConstants.feeratePerKw, DefaultCommitmentFormat.htlcTimeoutWeight)
-    val a2b_1 = bobMinReceive + 10.sat // will be in alice and bob tx
-    val a2b_2 = bobMinReceive + 20.sat // will be in alice and bob tx
-    val b2a_1 = aliceMinReceive + 10.sat // will be in alice and bob tx
-    val b2a_2 = bobMinOffer + 10.sat // will be only be in bob tx
+    val aliceMinReceive = Alice.nodeParams.dustLimit plus weight2fee(TestConstants.feeratePerKw, DefaultCommitmentFormat.htlcSuccessWeight)
+    val aliceMinOffer = Alice.nodeParams.dustLimit plus weight2fee(TestConstants.feeratePerKw, DefaultCommitmentFormat.htlcTimeoutWeight)
+    val bobMinReceive = Bob.nodeParams.dustLimit plus weight2fee(TestConstants.feeratePerKw, DefaultCommitmentFormat.htlcSuccessWeight)
+    val bobMinOffer = Bob.nodeParams.dustLimit plus weight2fee(TestConstants.feeratePerKw, DefaultCommitmentFormat.htlcTimeoutWeight)
+    val a2b_1 = bobMinReceive plus 10.sat // will be in alice and bob tx
+    val a2b_2 = bobMinReceive plus 20.sat // will be in alice and bob tx
+    val b2a_1 = aliceMinReceive plus 10.sat // will be in alice and bob tx
+    val b2a_2 = bobMinOffer plus 10.sat // will be only be in bob tx
     assert(a2b_1 > aliceMinOffer && a2b_1 > bobMinReceive)
     assert(a2b_2 > aliceMinOffer && a2b_2 > bobMinReceive)
     assert(b2a_1 > aliceMinReceive && b2a_1 > bobMinOffer)
@@ -1038,7 +1038,7 @@ class NormalStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with 
 
     // actual test begins
     bob2alice.expectMsgType[RevokeAndAck]
-    alice ! RevokeAndAck(ByteVector32.Zeroes, PrivateKey(randomBytes32), PrivateKey(randomBytes32).publicKey)
+    alice ! RevokeAndAck(ByteVector32.Zeroes, new PrivateKey(randomBytes32), new PrivateKey(randomBytes32).publicKey)
     alice2bob.expectMsgType[Error]
     awaitCond(alice.stateName == CLOSING)
     // channel should be advertised as down
@@ -1052,7 +1052,7 @@ class NormalStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with 
     import f._
     val tx = alice.stateData.asInstanceOf[DATA_NORMAL].commitments.localCommit.publishableTxs.commitTx.tx
     awaitCond(alice.stateData.asInstanceOf[DATA_NORMAL].commitments.remoteNextCommitInfo.isRight)
-    alice ! RevokeAndAck(ByteVector32.Zeroes, PrivateKey(randomBytes32), PrivateKey(randomBytes32).publicKey)
+    alice ! RevokeAndAck(ByteVector32.Zeroes, new PrivateKey(randomBytes32), new PrivateKey(randomBytes32).publicKey)
     alice2bob.expectMsgType[Error]
     awaitCond(alice.stateName == CLOSING)
     // channel should be advertised as down
@@ -1636,7 +1636,7 @@ class NormalStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with 
     bob.feeEstimator.setFeerate(FeeratesPerKw.single(fee.feeratePerKw))
     bob ! fee
     val error = bob2alice.expectMsgType[Error]
-    assert(new String(error.data.toArray) === CannotAffordFees(channelId(bob), missing = 71620000L sat, reserve = 20000L sat, fees = 72400000L sat).getMessage)
+    assert(new String(error.data.toArray) === CannotAffordFees(channelId(bob), missing = 71620000.sat, reserve = 20000.sat, fees = 72400000.sat).getMessage)
     awaitCond(bob.stateName == CLOSING)
     // channel should be advertised as down
     assert(channelUpdateListener.expectMsgType[LocalChannelDown].channelId === bob.stateData.asInstanceOf[DATA_CLOSING].channelId)
@@ -2254,7 +2254,7 @@ class NormalStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with 
     // assert the feerate of the claim main is what we expect
     val expectedFeeRate = alice.feeEstimator.getFeeratePerKw(alice.feeTargets.claimMainBlockTarget)
     val expectedFee = Transactions.weight2fee(expectedFeeRate, Transactions.claimP2WPKHOutputWeight)
-    val claimFee = claimMain.txIn.map(in => bobCommitTx.txOut(in.outPoint.index.toInt).amount).sum - claimMain.txOut.map(_.amount).sum
+    val claimFee = claimMain.txIn.map(in => bobCommitTx.txOut(in.outPoint.index.toInt).amount).sum minus claimMain.txOut.map(_.amount).sum
     assert(claimFee == expectedFee)
   }
 
@@ -2565,7 +2565,7 @@ class NormalStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with 
     bob ! WatchEventConfirmed(BITCOIN_FUNDING_DEEPLYBURIED, 400000, 42, null)
     val annSigsB = bob2alice.expectMsgType[AnnouncementSignatures]
     import initialState.commitments.{localParams, remoteParams}
-    val channelAnn = Announcements.makeChannelAnnouncement(Alice.nodeParams.chainHash, annSigsA.shortChannelId, Alice.nodeParams.nodeId, remoteParams.nodeId, Alice.channelKeyManager.fundingPublicKey(localParams.fundingKeyPath).publicKey, remoteParams.fundingPubKey, annSigsA.nodeSignature, annSigsB.nodeSignature, annSigsA.bitcoinSignature, annSigsB.bitcoinSignature)
+    val channelAnn = Announcements.makeChannelAnnouncement(Alice.nodeParams.chainHash, annSigsA.shortChannelId, Alice.nodeParams.nodeId, remoteParams.nodeId, Alice.channelKeyManager.fundingPublicKey(localParams.fundingKeyPath).getPublicKey, remoteParams.fundingPubKey, annSigsA.nodeSignature, annSigsB.nodeSignature, annSigsA.bitcoinSignature, annSigsB.bitcoinSignature)
     // actual test starts here
     bob2alice.forward(alice)
     awaitCond({
@@ -2583,7 +2583,7 @@ class NormalStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with 
     bob ! WatchEventConfirmed(BITCOIN_FUNDING_DEEPLYBURIED, 42, 10, null)
     val annSigsB = bob2alice.expectMsgType[AnnouncementSignatures]
     import initialState.commitments.{localParams, remoteParams}
-    val channelAnn = Announcements.makeChannelAnnouncement(Alice.nodeParams.chainHash, annSigsA.shortChannelId, Alice.nodeParams.nodeId, remoteParams.nodeId, Alice.channelKeyManager.fundingPublicKey(localParams.fundingKeyPath).publicKey, remoteParams.fundingPubKey, annSigsA.nodeSignature, annSigsB.nodeSignature, annSigsA.bitcoinSignature, annSigsB.bitcoinSignature)
+    val channelAnn = Announcements.makeChannelAnnouncement(Alice.nodeParams.chainHash, annSigsA.shortChannelId, Alice.nodeParams.nodeId, remoteParams.nodeId, Alice.channelKeyManager.fundingPublicKey(localParams.fundingKeyPath).getPublicKey, remoteParams.fundingPubKey, annSigsA.nodeSignature, annSigsB.nodeSignature, annSigsA.bitcoinSignature, annSigsB.bitcoinSignature)
     bob2alice.forward(alice)
     awaitCond(alice.stateData.asInstanceOf[DATA_NORMAL].channelAnnouncement === Some(channelAnn))
 

@@ -20,6 +20,7 @@ import akka.actor.{ActorRef, Props}
 import akka.testkit.{TestKit, TestProbe}
 import com.whisk.docker.DockerReadyChecker
 import fr.acinq.bitcoin.{Block, Btc, BtcDouble, ByteVector32, DeterministicWallet, MnemonicCode, OutPoint, Satoshi, SatoshiLong, Script, ScriptFlags, ScriptWitness, SigVersion, Transaction, TxIn, TxOut}
+import fr.acinq.bitcoin.SigHash.SIGHASH_ALL
 import fr.acinq.eclair.TestKitBaseClass
 import fr.acinq.eclair.blockchain.bitcoind.BitcoinCoreWallet.{FundTransactionResponse, SignTransactionResponse}
 import fr.acinq.eclair.blockchain.bitcoind.BitcoindService.BitcoinReq
@@ -36,6 +37,7 @@ import org.json4s.JsonAST.{JDecimal, JString, JValue}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuiteLike
 import scodec.bits.ByteVector
+import fr.acinq.eclair.KotlinUtils._
 
 import java.net.InetSocketAddress
 import java.sql.DriverManager
@@ -47,8 +49,8 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
 
   import ElectrumWallet._
 
-  val entropy = ByteVector32(ByteVector.fill(32)(1))
-  val mnemonics = MnemonicCode.toMnemonics(entropy)
+  val entropy = ByteVector32.fromValidHex("01" * 32)
+  val mnemonics = MnemonicCode.toMnemonics(entropy.toByteArray)
   val seed = MnemonicCode.toSeed(mnemonics, "")
   logger.info(s"mnemonic codes for our wallet: $mnemonics")
   val master = DeterministicWallet.generate(seed)
@@ -92,7 +94,7 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
 
   test("wait until wallet is ready") {
     electrumClient = system.actorOf(Props(new ElectrumClientPool(new AtomicLong(), Set(ElectrumServerAddress(new InetSocketAddress("localhost", electrumPort), SSL.OFF)))))
-    wallet = system.actorOf(Props(new ElectrumWallet(seed, electrumClient, WalletParameters(Block.RegtestGenesisBlock.hash, new SqliteWalletDb(DriverManager.getConnection("jdbc:sqlite::memory:")), minimumFee = 5000 sat))), "wallet")
+    wallet = system.actorOf(Props(new ElectrumWallet(ByteVector.view(seed), electrumClient, WalletParameters(Block.RegtestGenesisBlock.hash, new SqliteWalletDb(DriverManager.getConnection("jdbc:sqlite::memory:")), minimumFee = 5000 sat))), "wallet")
     val probe = TestProbe()
     awaitCond({
       probe.send(wallet, GetData)
@@ -116,14 +118,14 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
 
     awaitCond({
       val GetBalanceResponse(_, unconfirmed1) = getBalance(probe)
-      unconfirmed1 == unconfirmed + 100000000.sat
+      unconfirmed1 == (unconfirmed plus 100000000.sat)
     }, max = 30 seconds, interval = 1 second)
 
     // confirm our tx
     generateBlocks(bitcoincli, 1)
     awaitCond({
       val GetBalanceResponse(confirmed1, _) = getBalance(probe)
-      confirmed1 == confirmed + 100000000.sat
+      confirmed1 == (confirmed plus 100000000.sat)
     }, max = 30 seconds, interval = 1 second)
 
     val GetCurrentReceiveAddressResponse(address1) = getCurrentAddress(probe)
@@ -138,7 +140,7 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
 
     awaitCond({
       val GetBalanceResponse(confirmed1, _) = getBalance(probe)
-      confirmed1 == confirmed + 250000000.sat
+      confirmed1 == (confirmed plus 250000000.sat)
     }, max = 30 seconds, interval = 1 second)
   }
 
@@ -150,12 +152,12 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
     // send money to our wallet
     val amount = 750000 sat
     val GetCurrentReceiveAddressResponse(address) = getCurrentAddress(probe)
-    val tx = Transaction(version = 2,
-      txIn = Nil,
-      txOut = Seq(
-        TxOut(amount, fr.acinq.eclair.addressToPublicKeyScript(address, Block.RegtestGenesisBlock.hash)),
-        TxOut(amount, fr.acinq.eclair.addressToPublicKeyScript(address, Block.RegtestGenesisBlock.hash))
-      ), lockTime = 0L)
+    val tx = new Transaction(2,
+      Nil,
+      Seq(
+        new TxOut(amount, fr.acinq.eclair.addressToPublicKeyScript(address, Block.RegtestGenesisBlock.hash)),
+        new TxOut(amount, fr.acinq.eclair.addressToPublicKeyScript(address, Block.RegtestGenesisBlock.hash))
+      ), 0L)
     val btcWallet = new BitcoinCoreWallet(bitcoinrpcclient)
     val btcClient = new ExtendedBitcoinClient(bitcoinrpcclient)
     val future = for {
@@ -167,13 +169,13 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
 
     awaitCond({
       val GetBalanceResponse(_, unconfirmed1) = getBalance(probe)
-      unconfirmed1 == unconfirmed + amount + amount
+      unconfirmed1 == (unconfirmed plus amount plus amount)
     }, max = 30 seconds, interval = 1 second)
 
     generateBlocks(bitcoincli, 1)
     awaitCond({
       val GetBalanceResponse(confirmed1, _) = getBalance(probe)
-      confirmed1 == confirmed + amount + amount
+      confirmed1 == (confirmed plus amount plus amount)
     }, max = 30 seconds, interval = 1 second)
   }
 
@@ -192,7 +194,7 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
     logger.info(s"$txid sent 1 btc to us at $address")
     awaitCond({
       val GetBalanceResponse(_, unconfirmed1) = getBalance(probe)
-      unconfirmed1 - unconfirmed === 100000000L.sat
+      (unconfirmed1 minus unconfirmed) === 100000000.sat
     }, max = 30 seconds, interval = 1 second)
 
     val TransactionReceived(tx, 0, received, _, _, _) = listener.receiveOne(5 seconds)
@@ -203,7 +205,7 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
     generateBlocks(bitcoincli, 1)
     awaitCond({
       val GetBalanceResponse(confirmed1, _) = getBalance(probe)
-      confirmed1 - confirmed === 100000000.sat
+      (confirmed1 minus confirmed) === 100000000.sat
     }, max = 30 seconds, interval = 1 second)
 
     awaitCond({
@@ -222,7 +224,7 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
     // create a tx that sends money to Bitcoin Core's address
     probe.send(bitcoincli, BitcoinReq("getnewaddress"))
     val JString(address) = probe.expectMsgType[JValue]
-    val tx = Transaction(version = 2, txIn = Nil, txOut = TxOut(Btc(1), fr.acinq.eclair.addressToPublicKeyScript(address, Block.RegtestGenesisBlock.hash)) :: Nil, lockTime = 0L)
+    val tx = new Transaction(2, Nil, new TxOut(Btc(1), fr.acinq.eclair.addressToPublicKeyScript(address, Block.RegtestGenesisBlock.hash)) :: Nil, 0L)
     probe.send(wallet, CompleteTransaction(tx, FeeratePerKw(20000 sat)))
     val CompleteTransactionResponse(tx1, _, None) = probe.expectMsgType[CompleteTransactionResponse]
 
@@ -242,7 +244,7 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
     awaitCond({
       val GetBalanceResponse(confirmed1, _) = getBalance(probe)
       logger.debug(s"current balance is $confirmed1")
-      confirmed1 < confirmed - 1.btc && confirmed1 > confirmed - 1.btc - 50000.sat
+      confirmed1 < (confirmed minus 1.btc) && confirmed1 > (confirmed minus 1.btc minus 50000.sat)
     }, max = 30 seconds, interval = 1 second)
   }
 
@@ -254,7 +256,7 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
     // create a tx that sends money to Bitcoin Core's address
     probe.send(bitcoincli, BitcoinReq("getnewaddress"))
     val JString(address) = probe.expectMsgType[JValue]
-    val tx = Transaction(version = 2, txIn = Nil, txOut = TxOut(Btc(1), fr.acinq.eclair.addressToPublicKeyScript(address, Block.RegtestGenesisBlock.hash)) :: Nil, lockTime = 0L)
+    val tx = new Transaction(2, Nil, new TxOut(Btc(1), fr.acinq.eclair.addressToPublicKeyScript(address, Block.RegtestGenesisBlock.hash)) :: Nil, 0)
     probe.send(wallet, CompleteTransaction(tx, FeeratePerKw(20000 sat)))
     val CompleteTransactionResponse(tx1, _, None) = probe.expectMsgType[CompleteTransactionResponse]
 
@@ -268,7 +270,7 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
     awaitCond({
       val GetBalanceResponse(confirmed1, _) = getBalance(probe)
       logger.info(s"current balance is $confirmed $unconfirmed")
-      confirmed1 < confirmed - 1.btc && confirmed1 > confirmed - 1.btc - 50000.sat
+      confirmed1 < (confirmed minus 1.btc) && confirmed1 > (confirmed minus 1.btc minus 50000.sat)
     }, max = 30 seconds, interval = 1 second)
   }
 
@@ -281,7 +283,7 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
     val tx1 = {
       probe.send(bitcoincli, BitcoinReq("getnewaddress"))
       val JString(address) = probe.expectMsgType[JValue]
-      val tmp = Transaction(version = 2, txIn = Nil, txOut = TxOut(Btc(1), fr.acinq.eclair.addressToPublicKeyScript(address, Block.RegtestGenesisBlock.hash)) :: Nil, lockTime = 0L)
+      val tmp = new Transaction(2, Nil, new TxOut(Btc(1), fr.acinq.eclair.addressToPublicKeyScript(address, Block.RegtestGenesisBlock.hash)) :: Nil, 0)
       probe.send(wallet, CompleteTransaction(tmp, FeeratePerKw(20000 sat)))
       val CompleteTransactionResponse(tx, _, None) = probe.expectMsgType[CompleteTransactionResponse]
       probe.send(wallet, CancelTransaction(tx))
@@ -291,7 +293,7 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
     val tx2 = {
       probe.send(bitcoincli, BitcoinReq("getnewaddress"))
       val JString(address) = probe.expectMsgType[JValue]
-      val tmp = Transaction(version = 2, txIn = Nil, txOut = TxOut(Btc(1), fr.acinq.eclair.addressToPublicKeyScript(address, Block.RegtestGenesisBlock.hash)) :: Nil, lockTime = 0L)
+      val tmp = new Transaction(2, Nil, new TxOut(Btc(1), fr.acinq.eclair.addressToPublicKeyScript(address, Block.RegtestGenesisBlock.hash)) :: Nil, 0)
       probe.send(wallet, CompleteTransaction(tmp, FeeratePerKw(20000 sat)))
       val CompleteTransactionResponse(tx, _, None) = probe.expectMsgType[CompleteTransactionResponse]
       probe.send(wallet, CancelTransaction(tx))
@@ -371,19 +373,18 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
     }, max = 30 seconds, interval = 1 second)
 
     // send everything back to ourselves again
-    val tx2 = Transaction(version = 2,
-      txIn = TxIn(OutPoint(tx1, 0), signatureScript = Nil, sequence = TxIn.SEQUENCE_FINAL) :: Nil,
-      txOut = TxOut(Satoshi(0), eclair.addressToPublicKeyScript(address, Block.RegtestGenesisBlock.hash)) :: Nil,
-      lockTime = 0)
+    val tx2 = new Transaction(2,
+      new TxIn(new OutPoint(tx1, 0), TxIn.SEQUENCE_FINAL) :: Nil,
+      new TxOut(new Satoshi(0), eclair.addressToPublicKeyScript(address, Block.RegtestGenesisBlock.hash)) :: Nil,
+      0)
 
-    val sig = Transaction.signInput(tx2, 0, Scripts.multiSig2of2(priv.publicKey, priv.publicKey), bitcoin.SIGHASH_ALL, tx1.txOut(0).amount, SigVersion.SIGVERSION_WITNESS_V0, priv)
-    val tx3 = tx2.updateWitness(0, ScriptWitness(Seq(ByteVector.empty, sig, sig, Script.write(Scripts.multiSig2of2(priv.publicKey, priv.publicKey)))))
+    val sig = Transaction.signInput(tx2, 0, Scripts.multiSig2of2(priv.publicKey, priv.publicKey), SIGHASH_ALL, tx1.txOut(0).amount, SigVersion.SIGVERSION_WITNESS_V0, priv)
+    val tx3 = tx2.updateWitness(0, new ScriptWitness().push(Array.emptyByteArray).push(sig).push(sig).push(Script.write(Scripts.multiSig2of2(priv.publicKey, priv.publicKey))))
     Transaction.correctlySpends(tx3, Seq(tx1), ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
     val fee = Transactions.weight2fee(FeeratePerKw.MinimumFeeratePerKw, tx3.weight())
-    val tx4 = tx3.copy(txOut = tx3.txOut(0).copy(amount = tx1.txOut(0).amount - fee) :: Nil)
-    val sig1 = Transaction.signInput(tx4, 0, Scripts.multiSig2of2(priv.publicKey, priv.publicKey), bitcoin.SIGHASH_ALL, tx1.txOut(0).amount, SigVersion.SIGVERSION_WITNESS_V0, priv)
-    val tx5 = tx4.updateWitness(0, ScriptWitness(Seq(ByteVector.empty, sig1, sig1, Script.write(Scripts.multiSig2of2(priv.publicKey, priv.publicKey)))))
-
+    val tx4 = tx3.updateOutputs(tx3.txOut(0).updateAmount(tx1.txOut(0).amount minus fee) :: Nil)
+    val sig1 = Transaction.signInput(tx4, 0, Scripts.multiSig2of2(priv.publicKey, priv.publicKey), SIGHASH_ALL, tx1.txOut(0).amount, SigVersion.SIGVERSION_WITNESS_V0, priv)
+    val tx5 = tx4.updateWitness(0, new ScriptWitness().push(Array.emptyByteArray).push(sig1).push(sig1).push(Script.write(Scripts.multiSig2of2(priv.publicKey, priv.publicKey))))
     probe.send(wallet, BroadcastTransaction(tx5))
     val BroadcastTransactionResponse(_, None) = probe.expectMsgType[BroadcastTransactionResponse]
 

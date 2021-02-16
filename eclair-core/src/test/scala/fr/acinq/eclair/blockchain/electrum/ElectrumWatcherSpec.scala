@@ -33,6 +33,7 @@ import org.json4s.JsonAST.JValue
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuiteLike
 import scodec.bits._
+import fr.acinq.eclair.KotlinUtils._
 
 import java.net.InetSocketAddress
 import java.util.concurrent.atomic.AtomicLong
@@ -116,7 +117,7 @@ class ElectrumWatcherSpec extends TestKitBaseClass with AnyFunSuiteLike with Bit
 
     // wait until tx1 and tx2 are in the mempool (as seen by our ElectrumX server)
     awaitCond({
-      probe.send(electrumClient, ElectrumClient.GetScriptHashHistory(ElectrumClient.computeScriptHash(tx2.txOut.head.publicKeyScript)))
+      probe.send(electrumClient, ElectrumClient.GetScriptHashHistory(ElectrumClient.computeScriptHash(tx2.txOut.head.publicKeyScript.toByteArray)))
       val ElectrumClient.GetScriptHashHistoryResponse(_, history) = probe.expectMsgType[ElectrumClient.GetScriptHashHistoryResponse]
       history.map(_.tx_hash).toSet == Set(tx2.txid)
     }, max = 30 seconds, interval = 5 seconds)
@@ -221,7 +222,7 @@ class ElectrumWatcherSpec extends TestKitBaseClass with AnyFunSuiteLike with Bit
 
     {
       // tx is in the blockchain
-      val txid = ByteVector32(hex"c0b18008713360d7c30dae0940d88152a4bbb10faef5a69fefca5f7a7e1a06cc")
+      val txid = ByteVector32.fromValidHex("c0b18008713360d7c30dae0940d88152a4bbb10faef5a69fefca5f7a7e1a06cc")
       probe.send(watcher, GetTxWithMeta(txid))
       val res = probe.expectMsgType[GetTxWithMetaResponse]
       assert(res.txid === txid)
@@ -231,7 +232,7 @@ class ElectrumWatcherSpec extends TestKitBaseClass with AnyFunSuiteLike with Bit
 
     {
       // tx doesn't exist
-      val txid = ByteVector32(hex"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+      val txid = ByteVector32.fromValidHex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
       probe.send(watcher, GetTxWithMeta(txid))
       val res = probe.expectMsgType[GetTxWithMetaResponse]
       assert(res.txid === txid)

@@ -22,6 +22,7 @@ import fr.acinq.eclair._
 import fr.acinq.eclair.channel.{CMD_CLOSE, CMD_FORCECLOSE, AbstractCommitments, Commitments}
 import fr.acinq.eclair.gui.FxApp
 import fr.acinq.eclair.gui.utils.{ContextMenuUtils, CopyAction}
+import fr.acinq.eclair.KotlinUtils._
 import grizzled.slf4j.Logging
 import javafx.application.Platform
 import javafx.beans.value.{ChangeListener, ObservableValue}

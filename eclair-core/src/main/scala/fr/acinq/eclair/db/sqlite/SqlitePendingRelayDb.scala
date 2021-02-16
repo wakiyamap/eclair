@@ -42,7 +42,7 @@ class SqlitePendingRelayDb(sqlite: Connection) extends PendingRelayDb {
 
   override def addPendingRelay(channelId: ByteVector32, cmd: HtlcSettlementCommand): Unit = withMetrics("pending-relay/add") {
     using(sqlite.prepareStatement("INSERT OR IGNORE INTO pending_relay VALUES (?, ?, ?)")) { statement =>
-      statement.setBytes(1, channelId.toArray)
+      statement.setBytes(1, channelId.toByteArray)
       statement.setLong(2, cmd.id)
       statement.setBytes(3, cmdCodec.encode(cmd).require.toByteArray)
       statement.executeUpdate()
@@ -51,7 +51,7 @@ class SqlitePendingRelayDb(sqlite: Connection) extends PendingRelayDb {
 
   override def removePendingRelay(channelId: ByteVector32, htlcId: Long): Unit = withMetrics("pending-relay/remove") {
     using(sqlite.prepareStatement("DELETE FROM pending_relay WHERE channel_id=? AND htlc_id=?")) { statement =>
-      statement.setBytes(1, channelId.toArray)
+      statement.setBytes(1, channelId.toByteArray)
       statement.setLong(2, htlcId)
       statement.executeUpdate()
     }
@@ -59,7 +59,7 @@ class SqlitePendingRelayDb(sqlite: Connection) extends PendingRelayDb {
 
   override def listPendingRelay(channelId: ByteVector32): Seq[HtlcSettlementCommand] = withMetrics("pending-relay/list-channel") {
     using(sqlite.prepareStatement("SELECT data FROM pending_relay WHERE channel_id=?")) { statement =>
-      statement.setBytes(1, channelId.toArray)
+      statement.setBytes(1, channelId.toByteArray)
       val rs = statement.executeQuery()
       codecSequence(rs, cmdCodec)
     }

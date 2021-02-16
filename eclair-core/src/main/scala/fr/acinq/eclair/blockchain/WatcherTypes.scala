@@ -17,12 +17,12 @@
 package fr.acinq.eclair.blockchain
 
 import akka.actor.ActorRef
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.PublicKey
 import fr.acinq.bitcoin.{ByteVector32, Script, ScriptWitness, Transaction}
 import fr.acinq.eclair.channel.BitcoinEvent
 import fr.acinq.eclair.wire.ChannelAnnouncement
 import scodec.bits.ByteVector
-
+import fr.acinq.eclair.KotlinUtils._
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -48,15 +48,18 @@ sealed trait Watch {
 final case class WatchConfirmed(replyTo: ActorRef, txId: ByteVector32, publicKeyScript: ByteVector, minDepth: Long, event: BitcoinEvent) extends Watch
 object WatchConfirmed {
   // if we have the entire transaction, we can get the publicKeyScript from any of the outputs
-  def apply(replyTo: ActorRef, tx: Transaction, minDepth: Long, event: BitcoinEvent): WatchConfirmed = WatchConfirmed(replyTo, tx.txid, tx.txOut.map(_.publicKeyScript).headOption.getOrElse(ByteVector.empty), minDepth, event)
+  def apply(replyTo: ActorRef, tx: Transaction, minDepth: Long, event: BitcoinEvent): WatchConfirmed = {
+    val pubkeyScript = tx.txOut.map(_.publicKeyScript).headOption.map(b => b.toByteArray).getOrElse(Array.emptyByteArray)
+    WatchConfirmed(replyTo, tx.txid, ByteVector.view(pubkeyScript), minDepth, event)
+  }
 
-  def extractPublicKeyScript(witness: ScriptWitness): ByteVector = Try(PublicKey(witness.stack.last)) match {
+  def extractPublicKeyScript(witness: ScriptWitness): ByteVector = Try(new PublicKey(witness.last())) match {
     case Success(pubKey) =>
       // if last element of the witness is a public key, then this is a p2wpkh
-      Script.write(Script.pay2wpkh(pubKey))
+      ByteVector.view(Script.write(Script.pay2wpkh(pubKey)))
     case Failure(_) =>
       // otherwise this is a p2wsh
-      Script.write(Script.pay2wsh(witness.stack.last))
+      ByteVector.view(Script.write(Script.pay2wsh(witness.last())))
   }
 }
 

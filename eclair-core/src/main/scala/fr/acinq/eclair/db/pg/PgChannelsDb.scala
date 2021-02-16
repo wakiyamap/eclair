@@ -114,7 +114,7 @@ class PgChannelsDb(implicit ds: DataSource, lock: DatabaseLock) extends Channels
         val rs = statement.executeQuery
         var q: Queue[(ByteVector32, CltvExpiry)] = Queue()
         while (rs.next()) {
-          q = q :+ (ByteVector32(rs.getByteVector32FromHex("payment_hash")), CltvExpiry(rs.getLong("cltv_expiry")))
+          q = q :+ (new ByteVector32(rs.getByteVector32FromHex("payment_hash")), CltvExpiry(rs.getLong("cltv_expiry")))
         }
         q
       }

@@ -24,6 +24,8 @@ import fr.acinq.eclair.channel._
 import fr.acinq.eclair.channel.states.StateTestsBase
 import fr.acinq.eclair.wire._
 import fr.acinq.eclair.{MilliSatoshiLong, TestConstants, TestKitBaseClass}
+import fr.acinq.eclair.KotlinUtils._
+
 import org.scalatest.Outcome
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
 
@@ -96,7 +98,7 @@ class WaitForFundingLockedStateSpec extends TestKitBaseClass with FixtureAnyFunS
   test("recv BITCOIN_FUNDING_SPENT (other commit)") { f =>
     import f._
     val tx = alice.stateData.asInstanceOf[DATA_WAIT_FOR_FUNDING_LOCKED].commitments.localCommit.publishableTxs.commitTx.tx
-    alice ! WatchEventSpent(BITCOIN_FUNDING_SPENT, Transaction(0, Nil, Nil, 0))
+    alice ! WatchEventSpent(BITCOIN_FUNDING_SPENT, new Transaction(0, Nil, Nil, 0))
     alice2bob.expectMsgType[Error]
     alice2blockchain.expectMsg(PublishAsap(tx))
     alice2blockchain.expectMsgType[PublishAsap]

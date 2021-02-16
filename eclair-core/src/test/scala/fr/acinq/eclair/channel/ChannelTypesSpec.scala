@@ -1,6 +1,7 @@
 package fr.acinq.eclair.channel
 
-import fr.acinq.bitcoin.{OutPoint, SatoshiLong, Transaction, TxIn, TxOut}
+import fr.acinq.bitcoin.{OutPoint, Transaction, TxIn, TxOut}
+import fr.acinq.eclair.KotlinUtils._
 import fr.acinq.eclair.channel.Helpers.Closing
 import fr.acinq.eclair.randomBytes32
 import fr.acinq.eclair.transactions.Transactions
@@ -87,12 +88,12 @@ class ChannelTypesSpec extends AnyFunSuite {
 
     // Scenario 2: they claim the htlcs we sent before our htlc-timeout.
     {
-      val claimHtlcSuccess1 = lcp.htlcTimeoutTxs.head.copy(txOut = Seq(TxOut(3000.sat, ByteVector.empty), TxOut(2500.sat, ByteVector.empty)))
+      val claimHtlcSuccess1 = lcp.htlcTimeoutTxs.head.updateOutputs(Seq(new TxOut(3000.sat, Array.emptyByteArray), new TxOut(2500.sat, Array.emptyByteArray)))
       val lcp4a = Closing.updateLocalCommitPublished(lcp3, claimHtlcSuccess1)
       assert(lcp4a.isConfirmed)
       assert(!Closing.isLocalCommitDone(lcp4a))
 
-      val claimHtlcSuccess2 = lcp.htlcTimeoutTxs(1).copy(txOut = Seq(TxOut(3500.sat, ByteVector.empty), TxOut(3100.sat, ByteVector.empty)))
+      val claimHtlcSuccess2 = lcp.htlcTimeoutTxs(1).updateOutputs(Seq(new TxOut(3500.sat, Array.emptyByteArray), new TxOut(3100.sat, Array.emptyByteArray)))
       val lcp4b = Closing.updateLocalCommitPublished(lcp4a, claimHtlcSuccess2)
       assert(lcp4b.isConfirmed)
       assert(Closing.isLocalCommitDone(lcp4b))
@@ -135,12 +136,12 @@ class ChannelTypesSpec extends AnyFunSuite {
 
     // Scenario 2: they claim the remaining htlc outputs.
     {
-      val htlcSuccess = rcp.claimHtlcSuccessTxs(1).copy(txOut = Seq(TxOut(3000.sat, ByteVector.empty), TxOut(2500.sat, ByteVector.empty)))
+      val htlcSuccess = rcp.claimHtlcSuccessTxs(1).updateOutputs(Seq(new TxOut(3000.sat, ByteVector.empty), new TxOut(2500.sat, ByteVector.empty)))
       val rcp4a = Closing.updateRemoteCommitPublished(rcp3, htlcSuccess)
       assert(rcp4a.isConfirmed)
       assert(!Closing.isRemoteCommitDone(rcp4a))
 
-      val htlcTimeout = rcp.claimHtlcTimeoutTxs(1).copy(txOut = Seq(TxOut(3500.sat, ByteVector.empty), TxOut(3100.sat, ByteVector.empty)))
+      val htlcTimeout = rcp.claimHtlcTimeoutTxs(1).updateOutputs(Seq(new TxOut(3500.sat, ByteVector.empty), new TxOut(3100.sat, ByteVector.empty)))
       val rcp4b = Closing.updateRemoteCommitPublished(rcp4a, htlcTimeout)
       assert(rcp4b.isConfirmed)
       assert(Closing.isRemoteCommitDone(rcp4b))
@@ -179,19 +180,19 @@ class ChannelTypesSpec extends AnyFunSuite {
 
     // Scenario 2: they claim the remaining outputs.
     {
-      val remoteMainOutput = rvk.mainPenaltyTx.get.copy(txOut = Seq(TxOut(35000.sat, ByteVector.empty)))
+      val remoteMainOutput = rvk.mainPenaltyTx.get.updateOutputs(Seq(new TxOut(35000.sat, ByteVector.empty)))
       val rvk4a = Closing.updateRevokedCommitPublished(rvk3, remoteMainOutput)
       assert(!Closing.isRevokedCommitDone(rvk4a))
 
-      val htlcSuccess = rvk.htlcPenaltyTxs(2).copy(txOut = Seq(TxOut(3000.sat, ByteVector.empty), TxOut(2500.sat, ByteVector.empty)))
-      val htlcTimeout = rvk.htlcPenaltyTxs(3).copy(txOut = Seq(TxOut(3500.sat, ByteVector.empty), TxOut(3100.sat, ByteVector.empty)))
+      val htlcSuccess = rvk.htlcPenaltyTxs(2).updateOutputs(Seq(new TxOut(3000.sat, ByteVector.empty), new TxOut(2500.sat, ByteVector.empty)))
+      val htlcTimeout = rvk.htlcPenaltyTxs(3).updateOutputs(Seq(new TxOut(3500.sat, ByteVector.empty), new TxOut(3100.sat, ByteVector.empty)))
       // When Bob claims these outputs, the channel should call Helpers.claimRevokedHtlcTxOutputs to punish them by claiming the output of their htlc tx.
       val rvk4b = Seq(htlcSuccess, htlcTimeout).foldLeft(rvk4a) {
         case (current, tx) => Closing.updateRevokedCommitPublished(current, tx)
       }.copy(
         claimHtlcDelayedPenaltyTxs = List(
-          Transaction(2, Seq(TxIn(OutPoint(htlcSuccess, 0), ByteVector.empty, 0)), Seq(TxOut(5000.sat, ByteVector.empty)), 0),
-          Transaction(2, Seq(TxIn(OutPoint(htlcTimeout, 0), ByteVector.empty, 0)), Seq(TxOut(6000.sat, ByteVector.empty)), 0)
+          new Transaction(2, Seq(new TxIn(new OutPoint(htlcSuccess, 0), 0)), Seq(new TxOut(5000.sat, ByteVector.empty)), 0),
+          new Transaction(2, Seq(new TxIn(new OutPoint(htlcTimeout, 0), 0)), Seq(new TxOut(6000.sat, ByteVector.empty)), 0)
         )
       )
       assert(!Closing.isRevokedCommitDone(rvk4b))
@@ -199,44 +200,44 @@ class ChannelTypesSpec extends AnyFunSuite {
       // We claim one of the remaining outputs, they claim the other.
       val rvk5a = Closing.updateRevokedCommitPublished(rvk4b, rvk4b.claimHtlcDelayedPenaltyTxs.head)
       assert(!Closing.isRevokedCommitDone(rvk5a))
-      val theyClaimHtlcTimeout = rvk4b.claimHtlcDelayedPenaltyTxs(1).copy(txOut = Seq(TxOut(1500.sat, ByteVector.empty), TxOut(2500.sat, ByteVector.empty)))
+      val theyClaimHtlcTimeout = rvk4b.claimHtlcDelayedPenaltyTxs(1).updateOutputs(Seq(new TxOut(1500.sat, ByteVector.empty), new TxOut(2500.sat, ByteVector.empty)))
       val rvk5b = Closing.updateRevokedCommitPublished(rvk5a, theyClaimHtlcTimeout)
       assert(Closing.isRevokedCommitDone(rvk5b))
     }
   }
 
   private def createClosingTransactions(): (LocalCommitPublished, RemoteCommitPublished, RevokedCommitPublished) = {
-    val commitTx = Transaction(
+    val commitTx = new Transaction(
       2,
-      Seq(TxIn(OutPoint(randomBytes32, 0), ByteVector.empty, 0)),
+      Seq(new TxIn(new OutPoint(randomBytes32, 0), 0)),
       Seq(
-        TxOut(50000.sat, ByteVector.empty), // main output Alice
-        TxOut(40000.sat, ByteVector.empty), // main output Bob
-        TxOut(4000.sat, ByteVector.empty), // htlc received #1
-        TxOut(5000.sat, ByteVector.empty), // htlc received #2
-        TxOut(6000.sat, ByteVector.empty), // htlc sent #1
-        TxOut(7000.sat, ByteVector.empty), // htlc sent #2
+        new TxOut(50000.sat, ByteVector.empty), // main output Alice
+        new TxOut(40000.sat, ByteVector.empty), // main output Bob
+        new TxOut(4000.sat, ByteVector.empty), // htlc received #1
+        new TxOut(5000.sat, ByteVector.empty), // htlc received #2
+        new TxOut(6000.sat, ByteVector.empty), // htlc sent #1
+        new TxOut(7000.sat, ByteVector.empty), // htlc sent #2
       ),
       0
     )
-    val claimMainAlice = Transaction(2, Seq(TxIn(OutPoint(commitTx, 0), ByteVector.empty, 144)), Seq(TxOut(49500.sat, ByteVector.empty)), 0)
-    val htlcSuccess1 = Transaction(2, Seq(TxIn(OutPoint(commitTx, 2), ByteVector.empty, 1)), Seq(TxOut(3500.sat, ByteVector.empty)), 0)
-    val htlcSuccess2 = Transaction(2, Seq(TxIn(OutPoint(commitTx, 3), ByteVector.empty, 1)), Seq(TxOut(4500.sat, ByteVector.empty)), 0)
-    val htlcTimeout1 = Transaction(2, Seq(TxIn(OutPoint(commitTx, 4), ByteVector.empty, 1)), Seq(TxOut(5500.sat, ByteVector.empty)), 0)
-    val htlcTimeout2 = Transaction(2, Seq(TxIn(OutPoint(commitTx, 5), ByteVector.empty, 1)), Seq(TxOut(6500.sat, ByteVector.empty)), 0)
+    val claimMainAlice = new Transaction(2, Seq(new TxIn(new OutPoint(commitTx, 0), 144)), Seq(new TxOut(49500.sat, ByteVector.empty)), 0)
+    val htlcSuccess1 = new Transaction(2, Seq(new TxIn(new OutPoint(commitTx, 2), 1)), Seq(new TxOut(3500.sat, ByteVector.empty)), 0)
+    val htlcSuccess2 = new Transaction(2, Seq(new TxIn(new OutPoint(commitTx, 3), 1)), Seq(new TxOut(4500.sat, ByteVector.empty)), 0)
+    val htlcTimeout1 = new Transaction(2, Seq(new TxIn(new OutPoint(commitTx, 4), 1)), Seq(new TxOut(5500.sat, ByteVector.empty)), 0)
+    val htlcTimeout2 = new Transaction(2, Seq(new TxIn(new OutPoint(commitTx, 5), 1)), Seq(new TxOut(6500.sat, ByteVector.empty)), 0)
 
     val localCommit = {
       val claimHtlcDelayedTxs = List(
-        Transaction(2, Seq(TxIn(OutPoint(htlcSuccess1, 0), ByteVector.empty, 1)), Seq(TxOut(3400.sat, ByteVector.empty)), 0),
-        Transaction(2, Seq(TxIn(OutPoint(htlcSuccess2, 0), ByteVector.empty, 1)), Seq(TxOut(4400.sat, ByteVector.empty)), 0),
-        Transaction(2, Seq(TxIn(OutPoint(htlcTimeout1, 0), ByteVector.empty, 1)), Seq(TxOut(5400.sat, ByteVector.empty)), 0),
-        Transaction(2, Seq(TxIn(OutPoint(htlcTimeout2, 0), ByteVector.empty, 1)), Seq(TxOut(6400.sat, ByteVector.empty)), 0),
+        new Transaction(2, Seq(new TxIn(new OutPoint(htlcSuccess1, 0), 1)), Seq(new TxOut(3400.sat, ByteVector.empty)), 0),
+        new Transaction(2, Seq(new TxIn(new OutPoint(htlcSuccess2, 0), 1)), Seq(new TxOut(4400.sat, ByteVector.empty)), 0),
+        new Transaction(2, Seq(new TxIn(new OutPoint(htlcTimeout1, 0), 1)), Seq(new TxOut(5400.sat, ByteVector.empty)), 0),
+        new Transaction(2, Seq(new TxIn(new OutPoint(htlcTimeout2, 0), 1)), Seq(new TxOut(6400.sat, ByteVector.empty)), 0),
       )
       LocalCommitPublished(commitTx, Some(claimMainAlice), List(htlcSuccess1, htlcSuccess2), List(htlcTimeout1, htlcTimeout2), claimHtlcDelayedTxs, Map.empty)
     }
     val remoteCommit = RemoteCommitPublished(commitTx, Some(claimMainAlice), List(htlcSuccess1, htlcSuccess2), List(htlcTimeout1, htlcTimeout2), Map.empty)
     val revokedCommit = {
-      val mainPenalty = Transaction(2, Seq(TxIn(OutPoint(commitTx, 1), ByteVector.empty, 0)), Seq(TxOut(39500.sat, ByteVector.empty)), 0)
+      val mainPenalty = new Transaction(2, Seq(new TxIn(new OutPoint(commitTx, 1), 0)), Seq(new TxOut(39500.sat, ByteVector.empty)), 0)
       RevokedCommitPublished(commitTx, Some(claimMainAlice), Some(mainPenalty), List(htlcSuccess1, htlcSuccess2, htlcTimeout1, htlcTimeout2), Nil, Map.empty)
     }
 

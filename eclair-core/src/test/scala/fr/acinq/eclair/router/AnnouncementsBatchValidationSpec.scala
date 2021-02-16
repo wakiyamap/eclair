@@ -20,7 +20,7 @@ import akka.actor.ActorSystem
 import akka.pattern.pipe
 import akka.testkit.TestProbe
 import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
-import fr.acinq.bitcoin.Crypto.PrivateKey
+import fr.acinq.bitcoin.PrivateKey
 import fr.acinq.bitcoin.{Block, Satoshi, SatoshiLong, Script, Transaction}
 import fr.acinq.eclair.blockchain.ValidateResult
 import fr.acinq.eclair.blockchain.bitcoind.BitcoinCoreWallet
@@ -29,9 +29,11 @@ import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.transactions.Scripts
 import fr.acinq.eclair.wire.{ChannelAnnouncement, ChannelUpdate}
 import fr.acinq.eclair.{CltvExpiryDelta, Features, MilliSatoshiLong, ShortChannelId, randomKey}
+import fr.acinq.eclair.KotlinUtils._
 import org.json4s.JsonAST.JString
 import org.scalatest.funsuite.AnyFunSuite
 
+import scala.collection.JavaConverters.seqAsJavaListConverter
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext}
 
@@ -93,8 +95,8 @@ object AnnouncementsBatchValidationSpec {
     val amount = 1000000 sat
     // first we publish the funding tx
     val wallet = new BitcoinCoreWallet(extendedBitcoinClient.rpcClient)
-    val fundingPubkeyScript = Script.write(Script.pay2wsh(Scripts.multiSig2of2(node1BitcoinKey.publicKey, node2BitcoinKey.publicKey)))
-    val fundingTxFuture = wallet.makeFundingTx(fundingPubkeyScript, amount, FeeratePerKw(10000 sat))
+    val fundingPubkeyScript = Script.write(Script.pay2wsh(Scripts.multiSig2of2(node1BitcoinKey.publicKey, node2BitcoinKey.publicKey).asJava))
+    val fundingTxFuture = wallet.makeFundingTx(fundingPubkeyScript, amount, FeeratePerKw(10000.sat))
     val res = Await.result(fundingTxFuture, 10 seconds)
     Await.result(extendedBitcoinClient.publishTransaction(res.fundingTx), 10 seconds)
     SimulatedChannel(node1Key, node2Key, node1BitcoinKey, node2BitcoinKey, amount, res.fundingTx, res.fundingTxOutputIndex)

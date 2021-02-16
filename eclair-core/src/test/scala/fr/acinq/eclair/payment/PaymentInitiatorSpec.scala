@@ -36,7 +36,8 @@ import fr.acinq.eclair.router.Router._
 import fr.acinq.eclair.wire.Onion.{FinalLegacyPayload, FinalTlvPayload}
 import fr.acinq.eclair.wire.OnionTlv.{AmountToForward, OutgoingCltv}
 import fr.acinq.eclair.wire.{Onion, OnionCodecs, OnionTlv, TrampolineFeeInsufficient, _}
-import fr.acinq.eclair.{ActivatedFeature, CltvExpiryDelta, Features, MilliSatoshiLong, NodeParams, TestConstants, TestKitBaseClass, randomBytes32, randomKey}
+import fr.acinq.eclair.{ActivatedFeature, CltvExpiryDelta, Features, KotlinUtils, MilliSatoshiLong, NodeParams, TestConstants, TestKitBaseClass, randomBytes32, randomKey}
+import KotlinUtils._
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
 import org.scalatest.{Outcome, Tag}
 import scodec.bits.HexStringSyntax

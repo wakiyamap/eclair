@@ -16,7 +16,7 @@
 
 package fr.acinq.eclair.blockchain.bitcoind
 
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.PublicKey
 import fr.acinq.bitcoin._
 import fr.acinq.eclair.blockchain._
 import fr.acinq.eclair.blockchain.bitcoind.rpc.{BitcoinJsonRPCClient, Error, ExtendedBitcoinClient, JsonRPCError}
@@ -25,6 +25,8 @@ import fr.acinq.eclair.transactions.Transactions
 import grizzled.slf4j.Logging
 import org.json4s.JsonAST._
 import scodec.bits.ByteVector
+import fr.acinq.eclair.KotlinUtils._
+import fr.acinq.secp256k1.Hex
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.math.BigDecimal.long2bigDecimal
@@ -39,7 +41,7 @@ class BitcoinCoreWallet(rpcClient: BitcoinJsonRPCClient)(implicit ec: ExecutionC
 
   val bitcoinClient = new ExtendedBitcoinClient(rpcClient)
 
-  def fundTransaction(tx: Transaction, lockUnspents: Boolean, feeRatePerKw: FeeratePerKw): Future[FundTransactionResponse] = fundTransaction(Transaction.write(tx).toHex, lockUnspents, feeRatePerKw)
+  def fundTransaction(tx: Transaction, lockUnspents: Boolean, feeRatePerKw: FeeratePerKw): Future[FundTransactionResponse] = fundTransaction(Hex.encode(Transaction.write(tx)), lockUnspents, feeRatePerKw)
 
   private def fundTransaction(hex: String, lockUnspents: Boolean, feeRatePerKw: FeeratePerKw): Future[FundTransactionResponse] = {
     val requestedFeeRatePerKB = FeeratePerKB(feeRatePerKw)
@@ -59,7 +61,7 @@ class BitcoinCoreWallet(rpcClient: BitcoinJsonRPCClient)(implicit ec: ExecutionC
     })
   }
 
-  def signTransaction(tx: Transaction): Future[SignTransactionResponse] = signTransaction(Transaction.write(tx).toHex)
+  def signTransaction(tx: Transaction): Future[SignTransactionResponse] = signTransaction(Hex.encode(Transaction.write(tx)))
 
   private def signTransaction(hex: String): Future[SignTransactionResponse] =
     rpcClient.invoke("signrawtransactionwithwallet", hex).map(json => {
@@ -93,7 +95,7 @@ class BitcoinCoreWallet(rpcClient: BitcoinJsonRPCClient)(implicit ec: ExecutionC
       // fee is optional and only included for sent transactions
       val fee = tx \ "fee" match {
         case JDecimal(fee) => toSatoshi(fee)
-        case _ => Satoshi(0)
+        case _ => new Satoshi(0)
       }
       val JInt(confirmations) = tx \ "confirmations"
       // while transactions are still in the mempool, block hash will no be included
@@ -132,17 +134,17 @@ class BitcoinCoreWallet(rpcClient: BitcoinJsonRPCClient)(implicit ec: ExecutionC
     JString(address) <- rpcClient.invoke("getnewaddress")
   } yield address
 
-  override def getReceivePubkey(receiveAddress: Option[String] = None): Future[Crypto.PublicKey] = for {
+  override def getReceivePubkey(receiveAddress: Option[String] = None): Future[PublicKey] = for {
     address <- receiveAddress.map(Future.successful).getOrElse(getReceiveAddress)
     JString(rawKey) <- rpcClient.invoke("getaddressinfo", address).map(_ \ "pubkey")
-  } yield PublicKey(ByteVector.fromValidHex(rawKey))
+  } yield new PublicKey(ByteVector.fromValidHex(rawKey))
 
   override def makeFundingTx(pubkeyScript: ByteVector, amount: Satoshi, feeRatePerKw: FeeratePerKw): Future[MakeFundingTxResponse] = {
-    val partialFundingTx = Transaction(
-      version = 2,
-      txIn = Seq.empty[TxIn],
-      txOut = TxOut(amount, pubkeyScript) :: Nil,
-      lockTime = 0)
+    val partialFundingTx = new Transaction(
+      2,
+      Seq.empty[TxIn],
+      new TxOut(amount, pubkeyScript) :: Nil,
+      0)
     for {
       // we ask bitcoin core to add inputs to the funding tx, and use the specified change address
       FundTransactionResponse(unsignedFundingTx, _, fee) <- fundTransaction(partialFundingTx, lockUnspents = true, feeRatePerKw)
@@ -207,6 +209,6 @@ object BitcoinCoreWallet {
   case class SignTransactionResponse(tx: Transaction, complete: Boolean)
   // @formatter:on
 
-  private def toSatoshi(amount: BigDecimal): Satoshi = Satoshi(amount.bigDecimal.scaleByPowerOfTen(8).longValue)
+  private def toSatoshi(amount: BigDecimal): Satoshi = new Satoshi(amount.bigDecimal.scaleByPowerOfTen(8).longValue)
 
 }

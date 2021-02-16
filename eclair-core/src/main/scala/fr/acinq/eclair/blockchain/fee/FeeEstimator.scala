@@ -16,7 +16,7 @@
 
 package fr.acinq.eclair.blockchain.fee
 
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.PublicKey
 
 trait FeeEstimator {
   // @formatter:off

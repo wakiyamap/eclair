@@ -21,8 +21,7 @@ import akka.event.Logging.MDC
 import akka.event.{BusLogging, DiagnosticLoggingAdapter}
 import akka.util.Timeout
 import com.google.common.net.HostAndPort
-import fr.acinq.bitcoin.Crypto.PublicKey
-import fr.acinq.bitcoin.{ByteVector32, DeterministicWallet, Satoshi, SatoshiLong, Script}
+import fr.acinq.bitcoin.{ByteVector32, DeterministicWallet, KeyPath, PublicKey, Satoshi, SatoshiLong, Script}
 import fr.acinq.eclair.Features.Wumbo
 import fr.acinq.eclair.Logs.LogCategory
 import fr.acinq.eclair._
@@ -34,6 +33,7 @@ import fr.acinq.eclair.io.PeerConnection.KillReason
 import fr.acinq.eclair.remote.EclairInternalsSerializer.RemoteTypes
 import fr.acinq.eclair.wire._
 import scodec.bits.ByteVector
+import KotlinUtils._
 
 import java.net.InetSocketAddress
 
@@ -409,24 +409,24 @@ object Peer {
 
   // @formatter:on
 
-  def makeChannelParams(nodeParams: NodeParams, features: Features, defaultFinalScriptPubkey: ByteVector, walletStaticPaymentBasepoint: Option[PublicKey], isFunder: Boolean, fundingAmount: Satoshi): LocalParams = {
+  def makeChannelParams(nodeParams: NodeParams, features: Features, defaultFinalScriptPubkey: Array[Byte], walletStaticPaymentBasepoint: Option[PublicKey], isFunder: Boolean, fundingAmount: Satoshi): LocalParams = {
     // we make sure that funder and fundee key path end differently
     val fundingKeyPath = nodeParams.channelKeyManager.newFundingKeyPath(isFunder)
     makeChannelParams(nodeParams, features, defaultFinalScriptPubkey, walletStaticPaymentBasepoint, isFunder, fundingAmount, fundingKeyPath)
   }
 
-  def makeChannelParams(nodeParams: NodeParams, features: Features, defaultFinalScriptPubkey: ByteVector, walletStaticPaymentBasepoint: Option[PublicKey], isFunder: Boolean, fundingAmount: Satoshi, fundingKeyPath: DeterministicWallet.KeyPath): LocalParams = {
+  def makeChannelParams(nodeParams: NodeParams, features: Features, defaultFinalScriptPubkey: Array[Byte], walletStaticPaymentBasepoint: Option[PublicKey], isFunder: Boolean, fundingAmount: Satoshi, fundingKeyPath: KeyPath): LocalParams = {
     LocalParams(
       nodeParams.nodeId,
       fundingKeyPath,
       dustLimit = nodeParams.dustLimit,
       maxHtlcValueInFlightMsat = nodeParams.maxHtlcValueInFlightMsat,
-      channelReserve = (fundingAmount * nodeParams.reserveToFundingRatio).max(nodeParams.dustLimit), // BOLT #2: make sure that our reserve is above our dust limit
+      channelReserve = (fundingAmount times nodeParams.reserveToFundingRatio).max(nodeParams.dustLimit), // BOLT #2: make sure that our reserve is above our dust limit
       htlcMinimum = nodeParams.htlcMinimum,
       toSelfDelay = nodeParams.toRemoteDelay, // we choose their delay
       maxAcceptedHtlcs = nodeParams.maxAcceptedHtlcs,
       isFunder = isFunder,
-      defaultFinalScriptPubKey = defaultFinalScriptPubkey,
+      defaultFinalScriptPubKey = ByteVector.view(defaultFinalScriptPubkey),
       walletStaticPaymentBasepoint = walletStaticPaymentBasepoint,
       features = features)
   }

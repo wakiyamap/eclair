@@ -64,7 +64,7 @@ object BitgoFeeProvider {
     // first we keep only fee ranges with a max block delay below the limit
     val belowLimit = feeRanges.filter(_.block <= maxBlockDelay)
     // out of all the remaining fee ranges, we select the one with the minimum higher bound
-    FeeratePerKB(Satoshi(belowLimit.map(_.fee).min))
+    FeeratePerKB(new Satoshi(belowLimit.map(_.fee).min))
   }
 
   def extractFeerates(feeRanges: Seq[BlockTarget]): FeeratesPerKB =

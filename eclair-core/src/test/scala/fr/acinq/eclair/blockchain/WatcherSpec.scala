@@ -18,9 +18,12 @@ package fr.acinq.eclair.blockchain
 
 import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.TestProbe
-import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
-import fr.acinq.bitcoin.{Base58, OutPoint, SIGHASH_ALL, Satoshi, SatoshiLong, Script, ScriptFlags, ScriptWitness, SigVersion, Transaction, TxIn, TxOut}
+import fr.acinq.bitcoin.{PrivateKey, PublicKey}
+import fr.acinq.bitcoin.{Base58, OutPoint, Satoshi, SatoshiLong, Script, ScriptFlags, ScriptWitness, SigVersion, Transaction, TxIn, TxOut}
+import fr.acinq.bitcoin.SigHash.SIGHASH_ALL
 import fr.acinq.eclair.blockchain.bitcoind.BitcoindService.BitcoinReq
+import fr.acinq.eclair.KotlinUtils._
+
 import org.json4s.JsonAST.{JString, JValue}
 import org.scalatest.funsuite.AnyFunSuiteLike
 
@@ -56,7 +59,9 @@ object WatcherSpec {
 
     probe.send(bitcoincli, BitcoinReq("dumpprivkey", address))
     val JString(wif) = probe.expectMsgType[JValue]
-    val (priv, true) = PrivateKey.fromBase58(wif, Base58.Prefix.SecretKeyTestnet)
+    val pair = PrivateKey.fromBase58(wif, Base58.Prefix.SecretKeyTestnet)
+    val priv = pair.getFirst
+    assert(pair.getSecond)
     (address, priv)
   }
 
@@ -87,11 +92,11 @@ object WatcherSpec {
   def createSpendP2WPKH(tx: Transaction, priv: PrivateKey, to: PublicKey, fee: Satoshi, sequence: Long, lockTime: Long): Transaction = {
     // tx sends funds to our key
     val pub = priv.publicKey
-    val outputIndex = tx.txOut.indexWhere(_.publicKeyScript == Script.write(Script.pay2wpkh(pub)))
+    val outputIndex = tx.txOut.indexWhere(_.publicKeyScript.contentEquals(Script.write(Script.pay2wpkh(pub))))
     // we spend this output and create a similar output with a smaller amount
-    val unsigned = Transaction(2, TxIn(OutPoint(tx, outputIndex), Nil, sequence) :: Nil, TxOut(tx.txOut(outputIndex).amount - fee, Script.pay2wpkh(to)) :: Nil, lockTime)
+    val unsigned = new Transaction(2, new TxIn(new OutPoint(tx, outputIndex), Nil, sequence) :: Nil, new TxOut(tx.txOut(outputIndex).amount minus fee, Script.pay2wpkh(to)) :: Nil, lockTime)
     val sig = Transaction.signInput(unsigned, 0, Script.pay2pkh(pub), SIGHASH_ALL, tx.txOut(outputIndex).amount, SigVersion.SIGVERSION_WITNESS_V0, priv)
-    val signed = unsigned.updateWitness(0, ScriptWitness(sig :: pub.value :: Nil))
+    val signed = unsigned.updateWitness(0, new ScriptWitness().push(sig).push(pub.value))
     Transaction.correctlySpends(signed, tx :: Nil, ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
     signed
   }

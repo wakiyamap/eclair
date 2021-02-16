@@ -21,7 +21,7 @@ import java.util.UUID
 import akka.actor.ActorRef
 import akka.event.LoggingAdapter
 import fr.acinq.bitcoin.ByteVector32
-import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
+import fr.acinq.bitcoin.{PrivateKey, PublicKey}
 import fr.acinq.eclair.channel.{CMD_ADD_HTLC, CMD_FAIL_HTLC, CannotExtractSharedSecret, Origin}
 import fr.acinq.eclair.crypto.Sphinx
 import fr.acinq.eclair.router.Router.{ChannelHop, Hop, NodeHop}
@@ -29,6 +29,7 @@ import fr.acinq.eclair.wire._
 import fr.acinq.eclair.{CltvExpiry, CltvExpiryDelta, MilliSatoshi, UInt64, randomKey}
 import scodec.bits.ByteVector
 import scodec.{Attempt, DecodeResult}
+import fr.acinq.eclair.KotlinUtils._
 
 import scala.reflect.ClassTag
 

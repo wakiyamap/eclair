@@ -27,6 +27,7 @@ import fr.acinq.eclair.blockchain.electrum.ElectrumClient._
 import grizzled.slf4j.Logging
 import org.scalatest.funsuite.AnyFunSuiteLike
 import scodec.bits._
+import fr.acinq.eclair.KotlinUtils._
 
 import scala.concurrent.duration._
 import scala.util.Random
@@ -88,7 +89,7 @@ class ElectrumClientPoolSpec extends TestKitBaseClass with AnyFunSuiteLike with 
     assert(response.txid == referenceTx.txid)
     assert(response.block_height == 500000)
     assert(response.pos == 2690)
-    assert(response.root == ByteVector32(hex"1f6231ed3de07345b607ec2a39b2d01bec2fe10dfb7f516ba4958a42691c9531"))
+    assert(response.root == new ByteVector32("1f6231ed3de07345b607ec2a39b2d01bec2fe10dfb7f516ba4958a42691c9531"))
   }
 
   test("header subscription") {

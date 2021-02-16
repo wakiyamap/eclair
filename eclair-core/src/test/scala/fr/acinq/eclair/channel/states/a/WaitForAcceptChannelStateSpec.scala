@@ -51,13 +51,13 @@ class WaitForAcceptChannelStateSpec extends TestKitBaseClass with FixtureAnyFunS
     import com.softwaremill.quicklens._
     val aliceNodeParams = Alice.nodeParams
       .modify(_.chainHash).setToIf(test.tags.contains("mainnet"))(Block.LivenetGenesisBlock.hash)
-      .modify(_.maxFundingSatoshis).setToIf(test.tags.contains("high-max-funding-size"))(Btc(100))
+      .modify(_.maxFundingSatoshis).setToIf(test.tags.contains("high-max-funding-size"))(Btc(100).toSatoshi)
     val aliceParams = Alice.channelParams
       .modify(_.features).setToIf(test.tags.contains("wumbo"))(Features(Set(ActivatedFeature(Wumbo, Optional))))
 
     val bobNodeParams = Bob.nodeParams
       .modify(_.chainHash).setToIf(test.tags.contains("mainnet"))(Block.LivenetGenesisBlock.hash)
-      .modify(_.maxFundingSatoshis).setToIf(test.tags.contains("high-max-funding-size"))(Btc(100))
+      .modify(_.maxFundingSatoshis).setToIf(test.tags.contains("high-max-funding-size"))(Btc(100).toSatoshi)
     val bobParams = Bob.channelParams
       .modify(_.features).setToIf(test.tags.contains("wumbo"))(Features(Set(ActivatedFeature(Wumbo, Optional))))
 
@@ -123,7 +123,7 @@ class WaitForAcceptChannelStateSpec extends TestKitBaseClass with FixtureAnyFunS
     import f._
     val accept = bob2alice.expectMsgType[AcceptChannel]
     // 30% is huge, recommended ratio is 1%
-    val reserveTooHigh = TestConstants.fundingSatoshis * 0.3
+    val reserveTooHigh = TestConstants.fundingSatoshis times 0.3
     alice ! accept.copy(channelReserveSatoshis = reserveTooHigh)
     val error = alice2bob.expectMsgType[Error]
     assert(error === Error(accept.temporaryChannelId, ChannelReserveTooHigh(accept.temporaryChannelId, reserveTooHigh, 0.3, 0.05).getMessage))
@@ -133,7 +133,7 @@ class WaitForAcceptChannelStateSpec extends TestKitBaseClass with FixtureAnyFunS
   test("recv AcceptChannel (reserve below dust limit)") { f =>
     import f._
     val accept = bob2alice.expectMsgType[AcceptChannel]
-    val reserveTooSmall = accept.dustLimitSatoshis - 1.sat
+    val reserveTooSmall = accept.dustLimitSatoshis minus 1.sat
     alice ! accept.copy(channelReserveSatoshis = reserveTooSmall)
     val error = alice2bob.expectMsgType[Error]
     assert(error === Error(accept.temporaryChannelId, DustLimitTooLarge(accept.temporaryChannelId, accept.dustLimitSatoshis, reserveTooSmall).getMessage))
@@ -144,7 +144,7 @@ class WaitForAcceptChannelStateSpec extends TestKitBaseClass with FixtureAnyFunS
     import f._
     val accept = bob2alice.expectMsgType[AcceptChannel]
     val open = alice.stateData.asInstanceOf[DATA_WAIT_FOR_ACCEPT_CHANNEL].lastSent
-    val reserveTooSmall = open.dustLimitSatoshis - 1.sat
+    val reserveTooSmall = open.dustLimitSatoshis minus 1.sat
     alice ! accept.copy(channelReserveSatoshis = reserveTooSmall)
     val error = alice2bob.expectMsgType[Error]
     assert(error === Error(accept.temporaryChannelId, ChannelReserveBelowOurDustLimit(accept.temporaryChannelId, reserveTooSmall, open.dustLimitSatoshis).getMessage))
@@ -155,7 +155,7 @@ class WaitForAcceptChannelStateSpec extends TestKitBaseClass with FixtureAnyFunS
     import f._
     val accept = bob2alice.expectMsgType[AcceptChannel]
     val open = alice.stateData.asInstanceOf[DATA_WAIT_FOR_ACCEPT_CHANNEL].lastSent
-    val dustTooBig = open.channelReserveSatoshis + 1.sat
+    val dustTooBig = open.channelReserveSatoshis plus 1.sat
     alice ! accept.copy(dustLimitSatoshis = dustTooBig)
     val error = alice2bob.expectMsgType[Error]
     assert(error === Error(accept.temporaryChannelId, DustLimitAboveOurChannelReserve(accept.temporaryChannelId, dustTooBig, open.channelReserveSatoshis).getMessage))

@@ -22,7 +22,7 @@ import java.util.UUID
 import akka.actor.ActorRef
 import akka.pattern._
 import akka.util.Timeout
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.PublicKey
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, Satoshi}
 import fr.acinq.eclair.TimestampQueryFilters._
 import fr.acinq.eclair.blockchain.OnChainBalance
@@ -41,6 +41,7 @@ import fr.acinq.eclair.router.Router._
 import fr.acinq.eclair.router.{NetworkStats, RouteCalculation, Router}
 import fr.acinq.eclair.wire._
 import scodec.bits.ByteVector
+import KotlinUtils._
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
@@ -420,7 +421,7 @@ class EclairImpl(appKit: Kit) extends Eclair {
 
   override def verifyMessage(message: ByteVector, recoverableSignature: ByteVector): VerifiedMessage = {
     val signedBytes = SignedMessage.signedBytes(message)
-    val signature = ByteVector64(recoverableSignature.tail)
+    val signature = new ByteVector64(recoverableSignature.tail.toArray)
     val recoveryId = recoverableSignature.head.toInt - 31
     val pubKeyFromSignature = Crypto.recoverPublicKey(signature, signedBytes, recoveryId)
     VerifiedMessage(true, pubKeyFromSignature)

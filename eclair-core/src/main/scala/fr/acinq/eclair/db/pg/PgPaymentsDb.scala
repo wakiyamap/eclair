@@ -20,7 +20,7 @@ import java.sql.ResultSet
 import java.util.UUID
 
 import fr.acinq.bitcoin.ByteVector32
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.PublicKey
 import fr.acinq.eclair.MilliSatoshi
 import fr.acinq.eclair.db.Monitoring.Metrics.withMetrics
 import fr.acinq.eclair.db.pg.PgUtils.DatabaseLock
@@ -131,7 +131,7 @@ class PgPaymentsDb(implicit ds: DataSource, lock: DatabaseLock) extends Payments
       rs.getString("payment_type"),
       MilliSatoshi(rs.getLong("amount_msat")),
       MilliSatoshi(rs.getLong("recipient_amount_msat")),
-      PublicKey(rs.getByteVectorFromHex("recipient_node_id")),
+      new PublicKey(rs.getByteVectorFromHex("recipient_node_id").toArray),
       rs.getLong("created_at"),
       rs.getStringNullable("payment_request").map(PaymentRequest.read),
       status

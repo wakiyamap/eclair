@@ -21,13 +21,14 @@ import java.util.concurrent.atomic.AtomicLong
 
 import com.typesafe.config.{Config, ConfigFactory}
 import fr.acinq.bitcoin.Block
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.PublicKey
 import fr.acinq.eclair.FeatureSupport.{Mandatory, Optional}
 import fr.acinq.eclair.Features._
 import fr.acinq.eclair.blockchain.fee.FeerateTolerance
 import fr.acinq.eclair.crypto.keymanager.{LocalChannelKeyManager, LocalNodeKeyManager}
 import org.scalatest.funsuite.AnyFunSuite
 import scodec.bits.{ByteVector, HexStringSyntax}
+import KotlinUtils._
 
 import scala.jdk.CollectionConverters._
 import scala.util.Try
@@ -144,7 +145,7 @@ class StartupSpec extends AnyFunSuite {
     )
 
     val nodeParams = makeNodeParamsWithDefaults(perNodeConf.withFallback(defaultConf))
-    val perNodeFeatures = nodeParams.featuresFor(PublicKey(ByteVector.fromValidHex("02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")))
+    val perNodeFeatures = nodeParams.featuresFor(PublicKey.fromHex("02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
     assert(perNodeFeatures === Features(Set(ActivatedFeature(VariableLengthOnion, Optional), ActivatedFeature(PaymentSecret, Mandatory), ActivatedFeature(BasicMultiPartPayment, Mandatory))))
   }
 
@@ -171,9 +172,9 @@ class StartupSpec extends AnyFunSuite {
     )
 
     val nodeParams = makeNodeParamsWithDefaults(perNodeConf.withFallback(defaultConf))
-    assert(nodeParams.onChainFeeConf.maxFeerateMismatchFor(PublicKey(hex"02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")) === FeerateTolerance(0.1, 15.0))
-    assert(nodeParams.onChainFeeConf.maxFeerateMismatchFor(PublicKey(hex"02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")) === FeerateTolerance(0.75, 5.0))
-    assert(nodeParams.onChainFeeConf.maxFeerateMismatchFor(PublicKey(hex"02cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")) === FeerateTolerance(0.5, 10.0))
+    assert(nodeParams.onChainFeeConf.maxFeerateMismatchFor(PublicKey.fromHex("02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")) === FeerateTolerance(0.1, 15.0))
+    assert(nodeParams.onChainFeeConf.maxFeerateMismatchFor(PublicKey.fromHex("02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")) === FeerateTolerance(0.75, 5.0))
+    assert(nodeParams.onChainFeeConf.maxFeerateMismatchFor(PublicKey.fromHex("02cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")) === FeerateTolerance(0.5, 10.0))
   }
 
   test("NodeParams should fail if htlc-minimum-msat is set to 0") {

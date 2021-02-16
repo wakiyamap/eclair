@@ -69,7 +69,7 @@ object EarnDotComFeeProvider {
     // first we keep only fee ranges with a max block delay below the limit
     val belowLimit = feeRanges.filter(_.maxDelay <= maxBlockDelay)
     // out of all the remaining fee ranges, we select the one with the minimum higher bound and make sure it is > 0
-    FeeratePerKB(Satoshi(Math.max(belowLimit.minBy(_.maxFee).maxFee, 1)))
+    FeeratePerKB(new Satoshi(Math.max(belowLimit.minBy(_.maxFee).maxFee, 1)))
   }
 
   def extractFeerates(feeRanges: Seq[FeeRange]): FeeratesPerKB =

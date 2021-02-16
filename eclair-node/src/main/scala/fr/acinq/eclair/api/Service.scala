@@ -31,7 +31,7 @@ import akka.stream.scaladsl.{BroadcastHub, Flow, Keep, Source}
 import akka.stream.{Materializer, OverflowStrategy}
 import akka.util.Timeout
 import com.google.common.net.HostAndPort
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.PublicKey
 import fr.acinq.bitcoin.{ByteVector32, Satoshi}
 import fr.acinq.eclair.api.FormParamExtractors._
 import fr.acinq.eclair.blockchain.fee.FeeratePerByte

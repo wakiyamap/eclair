@@ -35,6 +35,7 @@ import grizzled.slf4j.Logging
 import org.json4s.JsonAST.JValue
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuiteLike
+import fr.acinq.eclair.KotlinUtils._
 
 import java.util.concurrent.atomic.AtomicLong
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -72,7 +73,7 @@ class ZmqWatcherSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitcoind
     val m0 = Map.empty[OutPoint, Set[Watch]]
     val txid = randomBytes32
     val outputIndex = 42
-    val utxo = OutPoint(txid.reverse, outputIndex)
+    val utxo = new OutPoint(txid.reversed(), outputIndex)
 
     val w1 = WatchSpent(null, txid, outputIndex, randomBytes32, BITCOIN_FUNDING_SPENT)
     val w2 = WatchSpent(null, txid, outputIndex, randomBytes32, BITCOIN_FUNDING_SPENT)
@@ -88,17 +89,17 @@ class ZmqWatcherSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitcoind
     val m3 = addWatchedUtxos(m2, w3)
     assert(m3.keySet == Set(utxo) && m3(utxo).size == 3)
     val m4 = addWatchedUtxos(m3, w4)
-    assert(m4.keySet == Set(utxo, OutPoint(w4.txId.reverse, w4.outputIndex)) && m3(utxo).size == 3)
+    assert(m4.keySet == Set(utxo, new OutPoint(w4.txId.reversed(), w4.outputIndex)) && m3(utxo).size == 3)
     val m5 = addWatchedUtxos(m4, w5)
-    assert(m5.keySet == Set(utxo, OutPoint(w4.txId.reverse, w4.outputIndex)) && m5(utxo).size == 3)
+    assert(m5.keySet == Set(utxo, new OutPoint(w4.txId.reversed(), w4.outputIndex)) && m5(utxo).size == 3)
     val m6 = removeWatchedUtxos(m5, w3)
-    assert(m6.keySet == Set(utxo, OutPoint(w4.txId.reverse, w4.outputIndex)) && m6(utxo).size == 2)
+    assert(m6.keySet == Set(utxo, new OutPoint(w4.txId.reversed(), w4.outputIndex)) && m6(utxo).size == 2)
     val m7 = removeWatchedUtxos(m6, w3)
-    assert(m7.keySet == Set(utxo, OutPoint(w4.txId.reverse, w4.outputIndex)) && m7(utxo).size == 2)
+    assert(m7.keySet == Set(utxo, new OutPoint(w4.txId.reversed(), w4.outputIndex)) && m7(utxo).size == 2)
     val m8 = removeWatchedUtxos(m7, w2)
-    assert(m8.keySet == Set(utxo, OutPoint(w4.txId.reverse, w4.outputIndex)) && m8(utxo).size == 1)
+    assert(m8.keySet == Set(utxo, new OutPoint(w4.txId.reversed(), w4.outputIndex)) && m8(utxo).size == 1)
     val m9 = removeWatchedUtxos(m8, w1)
-    assert(m9.keySet == Set(OutPoint(w4.txId.reverse, w4.outputIndex)))
+    assert(m9.keySet == Set(new OutPoint(w4.txId.reversed(), w4.outputIndex)))
     val m10 = removeWatchedUtxos(m9, w4)
     assert(m10.isEmpty)
   }
@@ -130,7 +131,7 @@ class ZmqWatcherSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitcoind
     val watcher = system.actorOf(ZmqWatcher.props(randomBytes32, blockCount, new ExtendedBitcoinClient(bitcoinrpcclient)))
     val (address, priv) = getNewAddress(bitcoincli)
     val tx = sendToAddress(bitcoincli, address, 1.0)
-    val outputIndex = tx.txOut.indexWhere(_.publicKeyScript == Script.write(Script.pay2wpkh(priv.publicKey)))
+    val outputIndex = tx.txOut.indexWhere(_.publicKeyScript.contentEquals(Script.write(Script.pay2wpkh(priv.publicKey))))
     val (tx1, tx2) = createUnspentTxChain(tx, priv)
 
     val listener = TestProbe()
@@ -173,12 +174,12 @@ class ZmqWatcherSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitcoind
     // create a chain of transactions that we don't broadcast yet
     val (_, priv) = getNewAddress(bitcoincli)
     val tx1 = {
-      wallet.fundTransaction(Transaction(2, Nil, TxOut(150000 sat, Script.pay2wpkh(priv.publicKey)) :: Nil, 0), lockUnspents = true, FeeratePerKw(250 sat)).pipeTo(probe.ref)
+      wallet.fundTransaction(new Transaction(2, Nil, new TxOut(150000 sat, Script.pay2wpkh(priv.publicKey)) :: Nil, 0), lockUnspents = true, FeeratePerKw(250 sat)).pipeTo(probe.ref)
       val funded = probe.expectMsgType[FundTransactionResponse].tx
       wallet.signTransaction(funded).pipeTo(probe.ref)
       probe.expectMsgType[SignTransactionResponse].tx
     }
-    val outputIndex = tx1.txOut.indexWhere(_.publicKeyScript == Script.write(Script.pay2wpkh(priv.publicKey)))
+    val outputIndex = tx1.txOut.indexWhere(_.publicKeyScript.contentEquals(Script.write(Script.pay2wpkh(priv.publicKey))))
     val tx2 = createSpendP2WPKH(tx1, priv, priv.publicKey, 10000 sat, 1, 0)
 
     // setup watches before we publish transactions
@@ -210,7 +211,7 @@ class ZmqWatcherSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitcoind
     // tx1 has an absolute delay but no relative delay
     val initialBlockCount = blockCount.get
     val tx1 = {
-      wallet.fundTransaction(Transaction(2, Nil, TxOut(150000 sat, Script.pay2wpkh(priv.publicKey)) :: Nil, initialBlockCount + 5), lockUnspents = true, FeeratePerKw(250 sat)).pipeTo(probe.ref)
+      wallet.fundTransaction(new Transaction(2, Nil, new TxOut(150000 sat, Script.pay2wpkh(priv.publicKey)) :: Nil, initialBlockCount + 5), lockUnspents = true, FeeratePerKw(250 sat)).pipeTo(probe.ref)
       val funded = probe.expectMsgType[FundTransactionResponse].tx
       wallet.signTransaction(funded).pipeTo(probe.ref)
       probe.expectMsgType[SignTransactionResponse].tx

@@ -25,21 +25,21 @@ import fr.acinq.eclair.wire.CommonCodecs.setCodec
 import org.scalatest.funsuite.AnyFunSuite
 import scodec.Codec
 import scodec.bits.BitVector
-
+import fr.acinq.eclair.KotlinUtils._
 import scala.util.Random
 
 class SqliteWalletDbSpec extends AnyFunSuite {
   val random = new Random()
 
-  def makeChildHeader(header: BlockHeader): BlockHeader = header.copy(hashPreviousBlock = header.hash, nonce = random.nextLong() & 0xffffffffL)
+  def makeChildHeader(header: BlockHeader): BlockHeader = header.setHashPreviousBlock(header.hash).setNonce(random.nextLong() & 0xffffffffL)
 
   def makeHeaders(n: Int, acc: Seq[BlockHeader] = Seq(Block.RegtestGenesisBlock.header)): Seq[BlockHeader] = {
     if (acc.size == n) acc else makeHeaders(n, acc :+ makeChildHeader(acc.last))
   }
 
-  def randomTransaction = Transaction(version = 2,
-    txIn = TxIn(OutPoint(randomBytes32, random.nextInt(100)), signatureScript = Nil, sequence = TxIn.SEQUENCE_FINAL) :: Nil,
-    txOut = TxOut(Satoshi(random.nextInt(10000000)), randomBytes(20)) :: Nil,
+  def randomTransaction = new Transaction(2,
+    new TxIn(new OutPoint(randomBytes32, random.nextInt(100)), TxIn.SEQUENCE_FINAL) :: Nil,
+    new TxOut(new Satoshi(random.nextInt(10000000)), randomBytes(20).toArray) :: Nil,
     0L
   )
 

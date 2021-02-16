@@ -23,6 +23,7 @@ import fr.acinq.eclair.blockchain.electrum.ElectrumClient.computeScriptHash
 import fr.acinq.eclair.channel.{BITCOIN_FUNDING_DEPTHOK, BITCOIN_PARENT_TX_CONFIRMED}
 import fr.acinq.eclair.transactions.Scripts
 import fr.acinq.eclair.{ShortChannelId, TxCoordinates}
+import fr.acinq.eclair.KotlinUtils._
 
 import java.util.concurrent.atomic.AtomicLong
 import scala.collection.immutable.{Queue, SortedMap}
@@ -37,11 +38,11 @@ class ElectrumWatcher(blockCount: AtomicLong, client: ActorRef) extends Actor wi
       log.info("blindly validating channel={}", c)
       val pubkeyScript = Script.write(Script.pay2wsh(Scripts.multiSig2of2(c.bitcoinKey1, c.bitcoinKey2)))
       val TxCoordinates(_, _, outputIndex) = ShortChannelId.coordinates(c.shortChannelId)
-      val fakeFundingTx = Transaction(
-        version = 2,
-        txIn = Seq.empty[TxIn],
-        txOut = List.fill(outputIndex + 1)(TxOut(0 sat, pubkeyScript)), // quick and dirty way to be sure that the outputIndex'th output is of the expected format
-        lockTime = 0)
+      val fakeFundingTx = new Transaction(
+        2,
+        Seq.empty[TxIn],
+        List.fill(outputIndex + 1)(new TxOut(0 sat, pubkeyScript)), // quick and dirty way to be sure that the outputIndex'th output is of the expected format
+        0)
       sender ! ValidateResult(c, Right((fakeFundingTx, UtxoStatus.Unspent)))
 
     case _ => log.warning("unhandled message {}", message)

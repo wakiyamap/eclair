@@ -16,8 +16,8 @@
 
 package fr.acinq.eclair.wire
 
-import fr.acinq.bitcoin.DeterministicWallet.{ExtendedPrivateKey, KeyPath}
-import fr.acinq.bitcoin.{ByteVector32, OutPoint, Transaction, TxOut}
+import fr.acinq.bitcoin.DeterministicWallet.ExtendedPrivateKey
+import fr.acinq.bitcoin.{ByteVector32, KeyPath, OutPoint, Transaction, TxOut}
 import fr.acinq.eclair.MilliSatoshi
 import fr.acinq.eclair.channel._
 import fr.acinq.eclair.crypto.ShaChain
@@ -28,6 +28,15 @@ import fr.acinq.eclair.wire.LightningMessageCodecs._
 import grizzled.slf4j.Logging
 import scodec.codecs._
 import scodec.{Attempt, Codec}
+import shapeless.{::, HNil}
+
+import scala.compat.Platform
+import scala.concurrent.duration._
+import scala.collection.JavaConverters._
+import fr.acinq.eclair.KotlinUtils._
+import scodec.bits.ByteVector
+
+import scala.collection.JavaConverters.{iterableAsScalaIterableConverter, seqAsJavaListConverter}
 
 /**
  * Created by PM on 02/06/2017.
@@ -39,14 +48,22 @@ object ChannelCodecs extends Logging {
    */
   def lengthDelimited[T](codec: Codec[T]): Codec[T] = variableSizeBytesLong(varintoverflow, codec)
 
-  val keyPathCodec: Codec[KeyPath] = ("path" | listOfN(uint16, uint32)).xmap[KeyPath](l => new KeyPath(l), keyPath => keyPath.path.toList).as[KeyPath]
+  val keyPathCodec: Codec[KeyPath] = ("path" | listOfN(uint16, uint32)).xmap[KeyPath](l => {
+    val l1: java.util.List[java.lang.Long] = l.map(_.asInstanceOf[java.lang.Long]).asJava
+    new KeyPath(l1)
+  }, keyPath => {
+    keyPath.path.asScala.toList.map(_.toLong)
+  }).as[KeyPath]
 
   val extendedPrivateKeyCodec: Codec[ExtendedPrivateKey] = (
     ("secretkeybytes" | bytes32) ::
       ("chaincode" | bytes32) ::
       ("depth" | uint16) ::
       ("path" | keyPathCodec) ::
-      ("parent" | int64)).as[ExtendedPrivateKey]
+      ("parent" | int64)).xmap(
+    { case a :: b :: c :: d :: e :: HNil => new ExtendedPrivateKey(a, b, c, d, e) },
+    { exp => exp.secretkeybytes :: exp.chaincode :: exp.depth :: exp.path :: exp.parent :: HNil }
+  )
 
   val channelVersionCodec: Codec[ChannelVersion] = bits(ChannelVersion.LENGTH_BITS).as[ChannelVersion]
 
@@ -94,16 +111,19 @@ object ChannelCodecs extends Logging {
       ("toLocal" | millisatoshi) ::
       ("toRemote" | millisatoshi)).as[CommitmentSpec]
 
-  val outPointCodec: Codec[OutPoint] = lengthDelimited(bytes.xmap(d => OutPoint.read(d.toArray), d => OutPoint.write(d)))
+  val outPointCodec: Codec[OutPoint] = lengthDelimited(bytes.xmap(d => OutPoint.read(d.toArray), d => ByteVector.view(OutPoint.write(d))))
 
-  val txOutCodec: Codec[TxOut] = lengthDelimited(bytes.xmap(d => TxOut.read(d.toArray), d => TxOut.write(d)))
+  val txOutCodec: Codec[TxOut] = lengthDelimited(bytes.xmap(d => TxOut.read(d.toArray), d => ByteVector.view(TxOut.write(d))))
 
-  val txCodec: Codec[Transaction] = lengthDelimited(bytes.xmap(d => Transaction.read(d.toArray), d => Transaction.write(d)))
+  val txCodec: Codec[Transaction] = lengthDelimited(bytes.xmap(d => Transaction.read(d.toArray), d => ByteVector.view(Transaction.write(d))))
 
   val inputInfoCodec: Codec[InputInfo] = (
     ("outPoint" | outPointCodec) ::
       ("txOut" | txOutCodec) ::
-      ("redeemScript" | lengthDelimited(bytes))).as[InputInfo]
+      ("redeemScript" | lengthDelimited(bytes))).xmap(
+    { case a :: b :: c :: HNil => InputInfo(a, b, c.toArray)},
+    { i => i.outPoint :: i.txOut :: ByteVector.view(i.redeemScript.toByteArray) :: HNil }
+  )
 
   val txWithInputInfoCodec: Codec[TransactionWithInputInfo] = discriminated[TransactionWithInputInfo].by(uint16)
     .typecase(0x01, (("inputInfo" | inputInfoCodec) :: ("tx" | txCodec)).as[CommitTx])

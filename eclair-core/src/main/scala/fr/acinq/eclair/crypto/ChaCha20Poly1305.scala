@@ -16,15 +16,17 @@
 
 package fr.acinq.eclair.crypto
 
-import java.nio.ByteOrder
+import fr.acinq.bitcoin.crypto.Pack
 
+import java.nio.ByteOrder
 import fr.acinq.bitcoin.{ByteVector32, Protocol}
 import fr.acinq.eclair.crypto.ChaCha20Poly1305.{DecryptionError, EncryptionError, InvalidCounter}
 import grizzled.slf4j.Logger
 import grizzled.slf4j.Logging
-import org.spongycastle.crypto.engines.ChaCha7539Engine
-import org.spongycastle.crypto.params.{KeyParameter, ParametersWithIV}
+import org.bouncycastle.crypto.engines.ChaCha7539Engine
+import org.bouncycastle.crypto.params.{KeyParameter, ParametersWithIV}
 import scodec.bits.ByteVector
+import fr.acinq.eclair.KotlinUtils._
 
 /**
   * Poly1305 authenticator
@@ -39,7 +41,7 @@ object Poly1305 {
     */
   def mac(key: ByteVector, datas: ByteVector*): ByteVector = {
     val out = new Array[Byte](16)
-    val poly = new org.spongycastle.crypto.macs.Poly1305()
+    val poly = new org.bouncycastle.crypto.macs.Poly1305()
     poly.init(new KeyParameter(key.toArray))
     datas.foreach(data => poly.update(data.toArray, 0, data.length.toInt))
     poly.doFinal(out, 0)
@@ -120,7 +122,7 @@ object ChaCha20Poly1305 extends Logging {
   def encrypt(key: ByteVector, nonce: ByteVector, plaintext: ByteVector, aad: ByteVector): (ByteVector, ByteVector) = {
     val polykey = ChaCha20.encrypt(ByteVector32.Zeroes, key, nonce)
     val ciphertext = ChaCha20.encrypt(plaintext, key, nonce, 1)
-    val tag = Poly1305.mac(polykey, aad, pad16(aad), ciphertext, pad16(ciphertext), Protocol.writeUInt64(aad.length, ByteOrder.LITTLE_ENDIAN), Protocol.writeUInt64(ciphertext.length, ByteOrder.LITTLE_ENDIAN))
+    val tag = Poly1305.mac(polykey, aad, pad16(aad), ciphertext, pad16(ciphertext), ByteVector.view(Pack.writeInt64LE(aad.length)), ByteVector.view(Pack.writeInt64LE(ciphertext.length)))
 
     logger.debug(s"encrypt($key, $nonce, $aad, $plaintext) = ($ciphertext, $tag)")
     if (nonce === ChaCha20.ZeroNonce) {
@@ -141,7 +143,7 @@ object ChaCha20Poly1305 extends Logging {
     */
   def decrypt(key: ByteVector, nonce: ByteVector, ciphertext: ByteVector, aad: ByteVector, mac: ByteVector): ByteVector = {
     val polykey = ChaCha20.encrypt(ByteVector32.Zeroes, key, nonce)
-    val tag = Poly1305.mac(polykey, aad, pad16(aad), ciphertext, pad16(ciphertext), Protocol.writeUInt64(aad.length, ByteOrder.LITTLE_ENDIAN), Protocol.writeUInt64(ciphertext.length, ByteOrder.LITTLE_ENDIAN))
+    val tag = Poly1305.mac(polykey, aad, pad16(aad), ciphertext, pad16(ciphertext), ByteVector.view(Pack.writeInt64LE(aad.length)), ByteVector.view(Pack.writeInt64LE(ciphertext.length)))
     if (tag != mac) throw InvalidMac()
     val plaintext = ChaCha20.decrypt(ciphertext, key, nonce, 1)
 

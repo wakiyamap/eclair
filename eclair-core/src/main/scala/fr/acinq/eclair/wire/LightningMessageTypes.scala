@@ -17,7 +17,7 @@
 package fr.acinq.eclair.wire
 
 import com.google.common.base.Charsets
-import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
+import fr.acinq.bitcoin.{PrivateKey, PublicKey}
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Satoshi}
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.router.Announcements
@@ -295,3 +295,6 @@ case class GossipTimestampFilter(chainHash: ByteVector32, firstTimestamp: Long, 
 //
 
 case class UnknownMessage(tag: Int, data: ByteVector) extends LightningMessage
+object UnknownMessage {
+  def apply(tag: Int, data: Array[Byte]): UnknownMessage = new UnknownMessage(tag, ByteVector.view(data))
+}

@@ -23,6 +23,7 @@ import fr.acinq.eclair.blockchain.{GetTxWithMetaResponse, UtxoStatus, ValidateRe
 import fr.acinq.eclair.wire.ChannelAnnouncement
 import org.json4s.Formats
 import org.json4s.JsonAST._
+import fr.acinq.eclair.KotlinUtils._
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
@@ -149,7 +150,7 @@ class ExtendedBitcoinClient(val rpcClient: BitcoinJsonRPCClient) {
       }
       // with a verbosity of 0, getblock returns the raw serialized block
       block <- rpcClient.invoke("getblock", blockhash, 0).collect { case JString(b) => Block.read(b) }
-      prevblockhash = block.header.hashPreviousBlock.reverse
+      prevblockhash = block.header.hashPreviousBlock.reversed()
       res <- block.tx.find(tx => tx.txIn.exists(i => i.outPoint.txid == txid && i.outPoint.index == outputIndex)) match {
         case None => lookForSpendingTx(Some(prevblockhash), txid, outputIndex)
         case Some(tx) => Future.successful(tx)

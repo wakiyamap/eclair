@@ -17,7 +17,7 @@
 package fr.acinq.eclair.channel.states.h
 
 import akka.testkit.{TestFSMRef, TestProbe}
-import fr.acinq.bitcoin.Crypto.PrivateKey
+import fr.acinq.bitcoin.PrivateKey
 import fr.acinq.bitcoin.{ByteVector32, OutPoint, SatoshiLong, ScriptFlags, Transaction, TxIn}
 import fr.acinq.eclair.TestConstants.{Alice, Bob}
 import fr.acinq.eclair.blockchain._
@@ -30,6 +30,8 @@ import fr.acinq.eclair.payment.relay.Relayer._
 import fr.acinq.eclair.transactions.{Scripts, Transactions}
 import fr.acinq.eclair.wire._
 import fr.acinq.eclair.{CltvExpiry, MilliSatoshiLong, TestConstants, TestKitBaseClass, randomBytes32}
+import fr.acinq.eclair.KotlinUtils._
+
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
 import org.scalatest.{Outcome, Tag}
 import scodec.bits.ByteVector
@@ -275,7 +277,7 @@ class ClosingStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with
 
     // actual test starts here
     val sender = TestProbe()
-    val add = CMD_ADD_HTLC(sender.ref, 500000000 msat, ByteVector32(ByteVector.fill(32)(1)), cltvExpiry = CltvExpiry(300000), onion = TestConstants.emptyOnionPacket, localOrigin(sender.ref))
+    val add = CMD_ADD_HTLC(sender.ref, 500000000 msat, new ByteVector32("01" * 32), cltvExpiry = CltvExpiry(300000), onion = TestConstants.emptyOnionPacket, localOrigin(sender.ref))
     alice ! add
     val error = ChannelUnavailable(channelId(alice))
     sender.expectMsg(RES_ADD_FAILED(add, error, None))
@@ -372,14 +374,21 @@ class ClosingStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with
     channelUpdateListener.expectMsgType[LocalChannelDown]
 
     // scenario 1: bob claims the htlc output from the commit tx using its preimage
-    val claimHtlcSuccessFromCommitTx = Transaction(version = 0, txIn = TxIn(outPoint = OutPoint(randomBytes32, 0), signatureScript = ByteVector.empty, sequence = 0, witness = Scripts.witnessClaimHtlcSuccessFromCommitTx(Transactions.PlaceHolderSig, ra1, ByteVector.fill(130)(33))) :: Nil, txOut = Nil, lockTime = 0)
+    val claimHtlcSuccessFromCommitTx = new Transaction(
+      0,
+      new TxIn(new OutPoint(randomBytes32, 0), 0).updateWitness(Scripts.witnessClaimHtlcSuccessFromCommitTx(Transactions.PlaceHolderSig, ra1, ByteVector.fill(130)(33))) :: Nil,
+      Nil,
+      0)
     alice ! WatchEventSpent(BITCOIN_OUTPUT_SPENT, claimHtlcSuccessFromCommitTx)
     val fulfill1 = relayerA.expectMsgType[RES_ADD_SETTLED[Origin, HtlcResult.OnChainFulfill]]
     assert(fulfill1.htlc === htlca1)
     assert(fulfill1.result.paymentPreimage === ra1)
 
     // scenario 2: bob claims the htlc output from his own commit tx using its preimage (let's assume both parties had published their commitment tx)
-    val claimHtlcSuccessTx = Transaction(version = 0, txIn = TxIn(outPoint = OutPoint(randomBytes32, 0), signatureScript = ByteVector.empty, sequence = 0, witness = Scripts.witnessHtlcSuccess(Transactions.PlaceHolderSig, Transactions.PlaceHolderSig, ra1, ByteVector.fill(130)(33), Transactions.DefaultCommitmentFormat)) :: Nil, txOut = Nil, lockTime = 0)
+    val claimHtlcSuccessTx = new Transaction(0,
+      new TxIn(new OutPoint(randomBytes32, 0), 0).updateWitness(Scripts.witnessHtlcSuccess(Transactions.PlaceHolderSig, Transactions.PlaceHolderSig, ra1, ByteVector.fill(130)(33), Transactions.DefaultCommitmentFormat)) :: Nil,
+      Nil,
+      0)
     alice ! WatchEventSpent(BITCOIN_OUTPUT_SPENT, claimHtlcSuccessTx)
     val fulfill2 = relayerA.expectMsgType[RES_ADD_SETTLED[Origin, HtlcResult.OnChainFulfill]]
     assert(fulfill2.htlc === htlca1)
@@ -400,7 +409,7 @@ class ClosingStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with
     // alice sends an htlc to bob
     val (_, htlca1) = addHtlc(50000000 msat, alice, bob, alice2bob, bob2alice)
     // alice sends an htlc below dust to bob
-    val amountBelowDust = alice.stateData.asInstanceOf[DATA_NORMAL].commitments.localParams.dustLimit - 100.msat
+    val amountBelowDust = alice.stateData.asInstanceOf[DATA_NORMAL].commitments.localParams.dustLimit.toMilliSatoshi - 100.msat
     val (_, htlca2) = addHtlc(amountBelowDust, alice, bob, alice2bob, bob2alice)
     crossSign(alice, bob, alice2bob, bob2alice)
     val closingState = localClose(alice, alice2blockchain)
@@ -447,7 +456,7 @@ class ClosingStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with
     val htlca2 = addHtlc(cmd2, alice, bob, alice2bob, bob2alice)
     val (_, cmd3) = makeCmdAdd(30000000 msat, bob.underlyingActor.nodeParams.nodeId, alice.underlyingActor.nodeParams.currentBlockHeight, ra1)
     val htlca3 = addHtlc(cmd3, alice, bob, alice2bob, bob2alice)
-    val amountBelowDust = alice.stateData.asInstanceOf[DATA_NORMAL].commitments.localParams.dustLimit - 100.msat
+    val amountBelowDust = alice.stateData.asInstanceOf[DATA_NORMAL].commitments.localParams.dustLimit.toMilliSatoshi - 100.msat
     val (_, dustCmd) = makeCmdAdd(amountBelowDust, bob.underlyingActor.nodeParams.nodeId, alice.underlyingActor.nodeParams.currentBlockHeight, ra1)
     val dust = addHtlc(dustCmd, alice, bob, alice2bob, bob2alice)
     val (_, cmd4) = makeCmdAdd(20000000 msat, bob.underlyingActor.nodeParams.nodeId, alice.underlyingActor.nodeParams.currentBlockHeight + 1, ra1)
@@ -1209,7 +1218,7 @@ class ClosingStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with
     alice2blockchain.expectNoMsg(1 second)
 
     // bob RBFs his htlc-success with a different transaction
-    val bobHtlcSuccessTx2 = bobHtlcSuccessTx1.txinfo.tx.copy(txIn = TxIn(OutPoint(randomBytes32, 0), Nil, 0) +: bobHtlcSuccessTx1.txinfo.tx.txIn)
+    val bobHtlcSuccessTx2 = bobHtlcSuccessTx1.txinfo.tx.updateInputs(new TxIn(new OutPoint(randomBytes32, 0), Nil, 0) +: bobHtlcSuccessTx1.txinfo.tx.txIn)
     assert(bobHtlcSuccessTx2.txid !== bobHtlcSuccessTx1.txinfo.tx.txid)
     alice ! WatchEventSpent(BITCOIN_OUTPUT_SPENT, bobHtlcSuccessTx2)
     assert(alice2blockchain.expectMsgType[WatchConfirmed].txId === bobHtlcSuccessTx2.txid)
@@ -1314,7 +1323,7 @@ class ClosingStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with
       TestConstants.Bob.channelKeyManager.keyPath(bobCommitments.localParams, bobCommitments.channelVersion),
       bobCommitments.localCommit.index)
 
-    alice ! ChannelReestablish(channelId(bob), 42, 42, PrivateKey(ByteVector32.Zeroes), bobCurrentPerCommitmentPoint)
+    alice ! ChannelReestablish(channelId(bob), 42, 42, new PrivateKey(ByteVector32.Zeroes), bobCurrentPerCommitmentPoint)
 
     val error = alice2bob.expectMsgType[Error]
     assert(new String(error.data.toArray) === FundingTxSpent(channelId(alice), initialState.spendingTxes.head).getMessage)

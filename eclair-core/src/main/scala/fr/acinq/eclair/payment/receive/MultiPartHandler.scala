@@ -27,6 +27,7 @@ import fr.acinq.eclair.payment.PaymentRequest.{ExtraHop, PaymentRequestFeatures}
 import fr.acinq.eclair.payment.{IncomingPacket, PaymentReceived, PaymentRequest}
 import fr.acinq.eclair.wire._
 import fr.acinq.eclair.{Features, Logs, MilliSatoshi, NodeParams, randomBytes32}
+import fr.acinq.eclair.KotlinUtils._
 
 import scala.util.{Failure, Success, Try}
 

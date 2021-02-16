@@ -28,6 +28,7 @@ import fr.acinq.eclair.wire._
 import fr.acinq.eclair.{TestConstants, TestKitBaseClass, ToMilliSatoshiConversion}
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
 import org.scalatest.{Outcome, Tag}
+import fr.acinq.eclair.KotlinUtils._
 
 import scala.concurrent.duration._
 
@@ -75,11 +76,11 @@ class WaitForFundingCreatedStateSpec extends TestKitBaseClass with FixtureAnyFun
     import f._
     val fees = Transactions.weight2fee(TestConstants.feeratePerKw, Transactions.DefaultCommitmentFormat.commitWeight)
     val reserve = Bob.channelParams.channelReserve
-    val missing = 100.sat - fees - reserve
+    val missing = 100.sat minus fees minus reserve
     val fundingCreated = alice2bob.expectMsgType[FundingCreated]
     alice2bob.forward(bob)
     val error = bob2alice.expectMsgType[Error]
-    assert(error === Error(fundingCreated.temporaryChannelId, s"can't pay the fee: missing=${-missing} reserve=$reserve fees=$fees"))
+    assert(error === Error(fundingCreated.temporaryChannelId, s"can't pay the fee: missing=${missing.unaryMinus()} reserve=$reserve fees=$fees"))
     awaitCond(bob.stateName == CLOSED)
   }
 

@@ -17,8 +17,7 @@
 package fr.acinq.eclair
 
 import com.opentable.db.postgres.embedded.EmbeddedPostgres
-import fr.acinq.bitcoin.Crypto.PrivateKey
-import fr.acinq.bitcoin.{Block, ByteVector32, SatoshiLong, Script}
+import fr.acinq.bitcoin.{Block, ByteVector32, PrivateKey, Satoshi, SatoshiLong, Script}
 import fr.acinq.eclair.FeatureSupport.Optional
 import fr.acinq.eclair.Features._
 import fr.acinq.eclair.NodeParams.BITCOIND
@@ -33,6 +32,7 @@ import fr.acinq.eclair.router.Router.RouterConf
 import fr.acinq.eclair.wire.{Color, EncodingType, NodeAddress}
 import org.scalatest.Tag
 import scodec.bits.ByteVector
+import KotlinUtils._
 
 import java.sql.{Connection, DriverManager, Statement}
 import java.util.UUID
@@ -45,7 +45,7 @@ import scala.concurrent.duration._
 object TestConstants {
 
   val defaultBlockHeight = 400000
-  val fundingSatoshis = 1000000L sat
+  val fundingSatoshis = new Satoshi(1000000L)
   val pushMsat = 200000000L msat
   val feeratePerKw = FeeratePerKw(10000 sat)
   val emptyOnionPacket = wire.OnionRoutingPacket(0, ByteVector.fill(33)(0), ByteVector.fill(1300)(0), ByteVector32.Zeroes)
@@ -140,7 +140,7 @@ object TestConstants {
   }
 
   object Alice {
-    val seed = ByteVector32(ByteVector.fill(32)(1))
+    val seed = new ByteVector32("01" * 32)
     val nodeKeyManager = new LocalNodeKeyManager(seed, Block.RegtestGenesisBlock.hash)
     val channelKeyManager = new LocalChannelKeyManager(seed, Block.RegtestGenesisBlock.hash)
 
@@ -238,7 +238,7 @@ object TestConstants {
     def channelParams = Peer.makeChannelParams(
       nodeParams,
       nodeParams.features,
-      Script.write(Script.pay2wpkh(PrivateKey(randomBytes32).publicKey)),
+      Script.write(Script.pay2wpkh(new PrivateKey(randomBytes32).publicKey)),
       None,
       isFunder = true,
       fundingSatoshis
@@ -248,7 +248,7 @@ object TestConstants {
   }
 
   object Bob {
-    val seed = ByteVector32(ByteVector.fill(32)(2))
+    val seed = new ByteVector32("02" * 32)
     val nodeKeyManager = new LocalNodeKeyManager(seed, Block.RegtestGenesisBlock.hash)
     val channelKeyManager = new LocalChannelKeyManager(seed, Block.RegtestGenesisBlock.hash)
 
@@ -342,7 +342,7 @@ object TestConstants {
     def channelParams = Peer.makeChannelParams(
       nodeParams,
       nodeParams.features,
-      Script.write(Script.pay2wpkh(PrivateKey(randomBytes32).publicKey)),
+      Script.write(Script.pay2wpkh(new PrivateKey(randomBytes32).publicKey)),
       None,
       isFunder = false,
       fundingSatoshis).copy(

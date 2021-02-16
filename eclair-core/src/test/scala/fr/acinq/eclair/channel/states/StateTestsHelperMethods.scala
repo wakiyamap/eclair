@@ -18,8 +18,7 @@ package fr.acinq.eclair.channel.states
 
 import akka.actor.ActorRef
 import akka.testkit.{TestFSMRef, TestKitBase, TestProbe}
-import fr.acinq.bitcoin.Crypto.PublicKey
-import fr.acinq.bitcoin.{ByteVector32, Crypto, SatoshiLong, ScriptFlags, Transaction}
+import fr.acinq.bitcoin.{ByteVector32, Crypto, PublicKey, SatoshiLong, ScriptFlags, Transaction}
 import fr.acinq.eclair.TestConstants.{Alice, Bob, TestFeeEstimator}
 import fr.acinq.eclair.blockchain._
 import fr.acinq.eclair.blockchain.fee.FeeTargets
@@ -31,6 +30,7 @@ import fr.acinq.eclair.wire.Onion.FinalLegacyPayload
 import fr.acinq.eclair.wire._
 import fr.acinq.eclair.{FeatureSupport, Features, NodeParams, TestConstants, randomBytes32, _}
 import org.scalatest.{FixtureTestSuite, ParallelTestExecution}
+import KotlinUtils._
 
 import java.util.UUID
 import scala.concurrent.duration._

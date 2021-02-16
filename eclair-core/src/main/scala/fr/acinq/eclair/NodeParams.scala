@@ -22,10 +22,8 @@ import java.nio.file.Files
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
-
 import com.typesafe.config.{Config, ConfigFactory, ConfigValueType}
-import fr.acinq.bitcoin.Crypto.PublicKey
-import fr.acinq.bitcoin.{Block, ByteVector32, Crypto, Satoshi}
+import fr.acinq.bitcoin.{Block, ByteVector32, Crypto, PrivateKey, PublicKey, Satoshi}
 import fr.acinq.eclair.NodeParams.WatcherType
 import fr.acinq.eclair.Setup.Seeds
 import fr.acinq.eclair.blockchain.fee.{FeeEstimator, FeeTargets, FeerateTolerance, OnChainFeeConf}
@@ -39,6 +37,7 @@ import fr.acinq.eclair.tor.Socks5ProxyParams
 import fr.acinq.eclair.wire.{Color, EncodingType, NodeAddress}
 import grizzled.slf4j.Logging
 import scodec.bits.ByteVector
+import KotlinUtils._
 
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
@@ -90,7 +89,7 @@ case class NodeParams(nodeKeyManager: NodeKeyManager,
                       socksProxy_opt: Option[Socks5ProxyParams],
                       maxPaymentAttempts: Int,
                       enableTrampolinePayment: Boolean) {
-  val privateKey: Crypto.PrivateKey = nodeKeyManager.nodeKey.privateKey
+  val privateKey: PrivateKey = nodeKeyManager.nodeKey.privateKey
 
   val nodeId: PublicKey = nodeKeyManager.nodeId
 
@@ -162,7 +161,7 @@ object NodeParams extends Logging {
       } else {
         val randomSeed = randomBytes32
         writeSeedToFile(seedPath, randomSeed)
-        randomSeed.bytes
+        ByteVector.view(randomSeed.toByteArray)
       }
     }
 
@@ -222,7 +221,7 @@ object NodeParams extends Logging {
     val watchSpentWindow = FiniteDuration(config.getDuration("watch-spent-window").getSeconds, TimeUnit.SECONDS)
     require(watchSpentWindow > 0.seconds, "watch-spent-window must be strictly greater than 0")
 
-    val dustLimitSatoshis = Satoshi(config.getLong("dust-limit-satoshis"))
+    val dustLimitSatoshis = new Satoshi(config.getLong("dust-limit-satoshis"))
     if (chainHash == Block.LivenetGenesisBlock.hash) {
       require(dustLimitSatoshis >= Channel.MIN_DUSTLIMIT, s"dust limit must be greater than ${Channel.MIN_DUSTLIMIT}")
     }
@@ -267,13 +266,13 @@ object NodeParams extends Logging {
     val coreAndPluginFeatures = features.copy(unknown = features.unknown ++ pluginMessageParams.map(_.pluginFeature))
 
     val overrideFeatures: Map[PublicKey, Features] = config.getConfigList("override-features").asScala.map { e =>
-      val p = PublicKey(ByteVector.fromValidHex(e.getString("nodeid")))
+      val p = new PublicKey(ByteVector.fromValidHex(e.getString("nodeid")))
       val f = Features.fromConfiguration(e)
       validateFeatures(f)
       p -> f.copy(unknown = f.unknown ++ pluginMessageParams.map(_.pluginFeature))
     }.toMap
 
-    val syncWhitelist: Set[PublicKey] = config.getStringList("sync-whitelist").asScala.map(s => PublicKey(ByteVector.fromValidHex(s))).toSet
+    val syncWhitelist: Set[PublicKey] = config.getStringList("sync-whitelist").asScala.map(s => new PublicKey(ByteVector.fromValidHex(s))).toSet
 
     val socksProxy_opt = if (config.getBoolean("socks5.enabled")) {
       Some(Socks5ProxyParams(
@@ -330,7 +329,7 @@ object NodeParams extends Logging {
         updateFeeMinDiffRatio = config.getDouble("on-chain-fees.update-fee-min-diff-ratio"),
         defaultFeerateTolerance = FeerateTolerance(config.getDouble("on-chain-fees.feerate-tolerance.ratio-low"), config.getDouble("on-chain-fees.feerate-tolerance.ratio-high")),
         perNodeFeerateTolerance = config.getConfigList("on-chain-fees.override-feerate-tolerance").asScala.map { e =>
-          val nodeId = PublicKey(ByteVector.fromValidHex(e.getString("nodeid")))
+          val nodeId = new PublicKey(ByteVector.fromValidHex(e.getString("nodeid")))
           val tolerance = FeerateTolerance(e.getDouble("feerate-tolerance.ratio-low"), e.getDouble("feerate-tolerance.ratio-high"))
           nodeId -> tolerance
         }.toMap
@@ -359,8 +358,8 @@ object NodeParams extends Logging {
       watchSpentWindow = watchSpentWindow,
       paymentRequestExpiry = FiniteDuration(config.getDuration("payment-request-expiry").getSeconds, TimeUnit.SECONDS),
       multiPartPaymentExpiry = FiniteDuration(config.getDuration("multi-part-payment-expiry").getSeconds, TimeUnit.SECONDS),
-      minFundingSatoshis = Satoshi(config.getLong("min-funding-satoshis")),
-      maxFundingSatoshis = Satoshi(config.getLong("max-funding-satoshis")),
+      minFundingSatoshis = new Satoshi(config.getLong("min-funding-satoshis")),
+      maxFundingSatoshis = new Satoshi(config.getLong("max-funding-satoshis")),
       peerConnectionConf = PeerConnection.Conf(
         authTimeout = FiniteDuration(config.getDuration("peer-connection.auth-timeout").getSeconds, TimeUnit.SECONDS),
         initTimeout = FiniteDuration(config.getDuration("peer-connection.init-timeout").getSeconds, TimeUnit.SECONDS),
@@ -380,13 +379,13 @@ object NodeParams extends Logging {
         channelQueryChunkSize = config.getInt("router.sync.channel-query-chunk-size"),
         searchMaxRouteLength = config.getInt("router.path-finding.max-route-length"),
         searchMaxCltv = CltvExpiryDelta(config.getInt("router.path-finding.max-cltv")),
-        searchMaxFeeBase = Satoshi(config.getLong("router.path-finding.fee-threshold-sat")),
+        searchMaxFeeBase = new Satoshi(config.getLong("router.path-finding.fee-threshold-sat")),
         searchMaxFeePct = config.getDouble("router.path-finding.max-fee-pct"),
         searchHeuristicsEnabled = config.getBoolean("router.path-finding.heuristics-enable"),
         searchRatioCltv = config.getDouble("router.path-finding.ratio-cltv"),
         searchRatioChannelAge = config.getDouble("router.path-finding.ratio-channel-age"),
         searchRatioChannelCapacity = config.getDouble("router.path-finding.ratio-channel-capacity"),
-        mppMinPartAmount = Satoshi(config.getLong("router.path-finding.mpp.min-amount-satoshis")).toMilliSatoshi,
+        mppMinPartAmount = new Satoshi(config.getLong("router.path-finding.mpp.min-amount-satoshis")).toMilliSatoshi,
         mppMaxParts = config.getInt("router.path-finding.mpp.max-parts")
       ),
       socksProxy_opt = socksProxy_opt,

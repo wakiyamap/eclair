@@ -22,7 +22,7 @@ import fr.acinq.eclair.TestConstants.Alice.nodeParams
 import fr.acinq.eclair.TestUtils.NoLoggingDiagnostics
 import fr.acinq.eclair.channel.Helpers.Closing
 import org.scalatest.funsuite.AnyFunSuite
-
+import fr.acinq.eclair.KotlinUtils._
 import scala.concurrent.duration._
 
 class HelpersSpec extends AnyFunSuite {

@@ -20,7 +20,7 @@
 
     <groupId>fr.acinq.eclair</groupId>
     <artifactId>eclair_2.13</artifactId>
-    <version>0.5.1-SNAPSHOT</version>
+    <version>0.5.1-bitcoin-kmp-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <modules>
@@ -260,6 +260,18 @@
         <repository>
             <id>sonatype snapshots</id>
             <url>https://oss.sonatype.org/content/repositories/snapshots/</url>
+        </repository>
+        <repository>
+            <id>jcenter</id>
+            <url>https://jcenter.bintray.com</url>
+        </repository>
+        <repository>
+            <id>kotlin-eap</id>
+            <url>https://dl.bintray.com/kotlin/kotlin-eap/</url>
+        </repository>
+        <repository>
+            <id>acinq</id>
+            <url>https://dl.bintray.com/acinq/libs/</url>
         </repository>
     </repositories>
 

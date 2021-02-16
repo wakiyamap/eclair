@@ -18,9 +18,8 @@ package fr.acinq.eclair.blockchain.electrum
 
 import java.net.{InetSocketAddress, SocketAddress}
 import java.util
-
 import akka.actor.{Actor, ActorLogging, ActorRef, Stash, Terminated}
-import fr.acinq.bitcoin._
+import fr.acinq.bitcoin.{Block, BlockHeader, ByteVector32, Crypto, OutPoint, Transaction}
 import fr.acinq.eclair.blockchain.bitcoind.rpc.{Error, JsonRPCRequest, JsonRPCResponse}
 import fr.acinq.eclair.blockchain.electrum.ElectrumClient.SSL
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
@@ -42,6 +41,8 @@ import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods
 import org.json4s.{DefaultFormats, Formats, JInt, JLong, JString}
 import scodec.bits.ByteVector
+import fr.acinq.eclair.KotlinUtils._
+import fr.acinq.secp256k1.Hex
 
 import scala.annotation.tailrec
 import scala.concurrent.ExecutionContext
@@ -368,7 +369,9 @@ object ElectrumClient {
     * @param publicKeyScript public key script
     * @return the hash of the public key script, as used by ElectrumX's hash-based methods
     */
-  def computeScriptHash(publicKeyScript: ByteVector): ByteVector32 = Crypto.sha256(publicKeyScript).reverse
+  def computeScriptHash(publicKeyScript: Array[Byte]): ByteVector32 = new ByteVector32(Crypto.sha256(publicKeyScript)).reversed()
+
+  def computeScriptHash(publicKeyScript: ByteVector): ByteVector32 = computeScriptHash(publicKeyScript.toArray)
 
   // @formatter:off
   case class AddStatusListener(actor: ActorRef)
@@ -392,7 +395,7 @@ object ElectrumClient {
 
   case class AddressListUnspent(address: String) extends Request
   case class UnspentItem(tx_hash: ByteVector32, tx_pos: Int, value: Long, height: Long) {
-    lazy val outPoint = OutPoint(tx_hash.reverse, tx_pos)
+    lazy val outPoint =new  OutPoint(tx_hash.reversed(), tx_pos)
   }
   case class AddressListUnspentResponse(address: String, unspents: Seq[UnspentItem]) extends Response
 
@@ -430,7 +433,7 @@ object ElectrumClient {
           loop(pos / 2, h +: hashes.drop(2))
         }
       }
-      loop(pos, txid.reverse +: merkle.map(b => b.reverse))
+      loop(pos, txid.reversed() +: merkle.map(b => b.reversed()))
     }
   }
 
@@ -447,14 +450,14 @@ object ElectrumClient {
   }
 
   case class Header(block_height: Long, version: Long, prev_block_hash: ByteVector32, merkle_root: ByteVector32, timestamp: Long, bits: Long, nonce: Long) {
-    def blockHeader = BlockHeader(version, prev_block_hash.reverse, merkle_root.reverse, timestamp, bits, nonce)
+    def blockHeader = new BlockHeader(version, prev_block_hash.reversed(), merkle_root.reversed(), timestamp, bits, nonce)
 
     lazy val block_hash: ByteVector32 = blockHeader.hash
-    lazy val block_id: ByteVector32 = block_hash.reverse
+    lazy val block_id: ByteVector32 = block_hash.reversed()
   }
 
   object Header {
-    def makeHeader(height: Long, header: BlockHeader) = ElectrumClient.Header(height, header.version, header.hashPreviousBlock.reverse, header.hashMerkleRoot.reverse, header.time, header.bits, header.nonce)
+    def makeHeader(height: Long, header: BlockHeader) = ElectrumClient.Header(height, header.version, header.hashPreviousBlock.reversed(), header.hashMerkleRoot.reversed(), header.time, header.bits, header.nonce)
 
     val RegtestGenesisHeader = makeHeader(0, Block.RegtestGenesisBlock.header)
     val TestnetGenesisHeader = makeHeader(0, Block.TestnetGenesisBlock.header)
@@ -556,7 +559,7 @@ object ElectrumClient {
     case ScriptHashListUnspent(scripthash) => JsonRPCRequest(id = reqId, method = "blockchain.scripthash.listunspent", params = scripthash.toHex :: Nil)
     case AddressSubscription(address, _) => JsonRPCRequest(id = reqId, method = "blockchain.address.subscribe", params = address :: Nil)
     case ScriptHashSubscription(scriptHash, _) => JsonRPCRequest(id = reqId, method = "blockchain.scripthash.subscribe", params = scriptHash.toString() :: Nil)
-    case BroadcastTransaction(tx) => JsonRPCRequest(id = reqId, method = "blockchain.transaction.broadcast", params = Transaction.write(tx).toHex :: Nil)
+    case BroadcastTransaction(tx) => JsonRPCRequest(id = reqId, method = "blockchain.transaction.broadcast", params = Hex.encode(Transaction.write(tx)) :: Nil)
     case GetTransactionIdFromPosition(height, tx_pos, merkle) => JsonRPCRequest(id = reqId, method = "blockchain.transaction.id_from_pos", params = height :: tx_pos :: merkle :: Nil)
     case GetTransaction(txid, _) => JsonRPCRequest(id = reqId, method = "blockchain.transaction.get", params = txid :: Nil)
     case HeaderSubscription(_) => JsonRPCRequest(id = reqId, method = "blockchain.headers.subscribe", params = Nil)
@@ -650,8 +653,9 @@ object ElectrumClient {
         case GetHeaders(start_height, _, _) =>
           val max = intField(json.result, "max")
           val JString(hex) = json.result \ "hex"
-          val bin = ByteVector.fromValidHex(hex).toArray
-          val blockHeaders = bin.grouped(80).map(BlockHeader.read).toList
+          val bin: Array[Byte] = ByteVector.fromValidHex(hex).toArray
+          val g = bin.grouped(80).toList
+          val blockHeaders = g.map(BlockHeader.read)
           GetHeadersResponse(start_height, blockHeaders, max)
         case GetMerkle(txid, _, context_opt) =>
           val JArray(hashes) = json.result \ "merkle"

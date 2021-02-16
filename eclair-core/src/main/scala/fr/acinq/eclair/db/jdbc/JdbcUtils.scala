@@ -82,13 +82,13 @@ trait JdbcUtils {
 
     def getByteVector32FromHex(columnLabel: String): ByteVector32 = {
       val s = rs.getString(columnLabel)
-      ByteVector32(ByteVector.fromValidHex(s))
+      new ByteVector32(s)
     }
 
     def getByteVector32FromHexNullable(columnLabel: String): Option[ByteVector32] = {
       val s = rs.getString(columnLabel)
       if (rs.wasNull()) None else {
-        Some(ByteVector32(ByteVector.fromValidHex(s)))
+        Some(new ByteVector32(s))
       }
     }
 
@@ -101,11 +101,11 @@ trait JdbcUtils {
       if (rs.wasNull()) ByteVector.empty else ByteVector(result)
     }
 
-    def getByteVector32(columnLabel: String): ByteVector32 = ByteVector32(ByteVector(rs.getBytes(columnLabel)))
+    def getByteVector32(columnLabel: String): ByteVector32 = new ByteVector32(rs.getBytes(columnLabel))
 
     def getByteVector32Nullable(columnLabel: String): Option[ByteVector32] = {
       val bytes = rs.getBytes(columnLabel)
-      if (rs.wasNull()) None else Some(ByteVector32(ByteVector(bytes)))
+      if (rs.wasNull()) None else Some(new ByteVector32(bytes))
     }
 
     def getStringNullable(columnLabel: String): Option[String] = {

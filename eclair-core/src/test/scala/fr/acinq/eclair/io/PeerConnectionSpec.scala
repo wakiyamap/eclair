@@ -19,7 +19,7 @@ package fr.acinq.eclair.io
 import akka.actor.PoisonPill
 import akka.testkit.{TestFSMRef, TestProbe}
 import fr.acinq.bitcoin.Block
-import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
+import fr.acinq.bitcoin.{PrivateKey, PublicKey}
 import fr.acinq.eclair.FeatureSupport.Optional
 import fr.acinq.eclair.Features.{BasicMultiPartPayment, ChannelRangeQueries, VariableLengthOnion}
 import fr.acinq.eclair.TestConstants._
@@ -28,6 +28,7 @@ import fr.acinq.eclair.crypto.TransportHandler
 import fr.acinq.eclair.router.Router._
 import fr.acinq.eclair.router.RoutingSyncSpec
 import fr.acinq.eclair.wire._
+import KotlinUtils._
 import org.scalatest.{Outcome, ParallelTestExecution}
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
 import scodec.bits._

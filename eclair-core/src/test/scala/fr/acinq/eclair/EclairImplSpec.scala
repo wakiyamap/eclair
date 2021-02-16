@@ -19,8 +19,7 @@ package fr.acinq.eclair
 import akka.actor.ActorRef
 import akka.testkit.TestProbe
 import akka.util.Timeout
-import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
-import fr.acinq.bitcoin.{Block, ByteVector32, ByteVector64, Crypto, SatoshiLong}
+import fr.acinq.bitcoin.{Block, ByteVector32, ByteVector64, Crypto, PrivateKey, PublicKey, Satoshi, SatoshiLong}
 import fr.acinq.eclair.TestConstants._
 import fr.acinq.eclair.blockchain.TestWallet
 import fr.acinq.eclair.blockchain.fee.{FeeratePerByte, FeeratePerKw}
@@ -41,6 +40,7 @@ import org.mockito.scalatest.IdiomaticMockito
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
 import org.scalatest.{Outcome, ParallelTestExecution}
 import scodec.bits._
+import KotlinUtils._
 
 import java.util.UUID
 import scala.concurrent.Await
@@ -82,15 +82,15 @@ class EclairImplSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with I
     import f._
 
     val eclair = new EclairImpl(kit)
-    val nodeId = PublicKey(hex"030bb6a5e0c6b203c7e2180fb78c7ba4bdce46126761d8201b91ddac089cdecc87")
+    val nodeId = PublicKey.fromHex("030bb6a5e0c6b203c7e2180fb78c7ba4bdce46126761d8201b91ddac089cdecc87")
 
     // standard conversion
-    eclair.open(nodeId, fundingAmount = 10000000L sat, pushAmount_opt = None, fundingFeeratePerByte_opt = Some(FeeratePerByte(5 sat)), initialRelayFees_opt = None, flags_opt = None, openTimeout_opt = None)
+    eclair.open(nodeId, fundingAmount = new Satoshi(10000000L), pushAmount_opt = None, fundingFeeratePerByte_opt = Some(FeeratePerByte(5 sat)), initialRelayFees_opt = None, flags_opt = None, openTimeout_opt = None)
     val open = switchboard.expectMsgType[OpenChannel]
     assert(open.fundingTxFeeratePerKw_opt === Some(FeeratePerKw(1250 sat)))
 
     // check that minimum fee rate of 253 sat/bw is used
-    eclair.open(nodeId, fundingAmount = 10000000L sat, pushAmount_opt = None, fundingFeeratePerByte_opt = Some(FeeratePerByte(1 sat)), initialRelayFees_opt = None, flags_opt = None, openTimeout_opt = None)
+    eclair.open(nodeId, fundingAmount = new Satoshi(10000000L), pushAmount_opt = None, fundingFeeratePerByte_opt = Some(FeeratePerByte(1 sat)), initialRelayFees_opt = None, flags_opt = None, openTimeout_opt = None)
     val open1 = switchboard.expectMsgType[OpenChannel]
     assert(open1.fundingTxFeeratePerKw_opt === Some(FeeratePerKw.MinimumFeeratePerKw))
   }
@@ -99,7 +99,7 @@ class EclairImplSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with I
     import f._
 
     val eclair = new EclairImpl(kit)
-    val nodeId = PublicKey(hex"030bb6a5e0c6b203c7e2180fb78c7ba4bdce46126761d8201b91ddac089cdecc87")
+    val nodeId = PublicKey.fromHex("030bb6a5e0c6b203c7e2180fb78c7ba4bdce46126761d8201b91ddac089cdecc87")
 
     eclair.send(None, nodeId, 123 msat, ByteVector32.Zeroes, invoice_opt = None)
     val send = paymentInitiator.expectMsgType[SendPaymentRequest]
@@ -204,11 +204,11 @@ class EclairImplSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with I
     import f._
 
     val (a_priv, b_priv, c_priv, d_priv, e_priv) = (
-      PrivateKey(hex"3580a881ac24eb00530a51235c42bcb65424ba121e2e7d910a70fa531a578d21"),
-      PrivateKey(hex"f6a353f7a5de654501c3495acde7450293f74d09086c2b7c9a4e524248d0daac"),
-      PrivateKey(hex"c2efe0095f9113bc5b9f4140958670a8ea2afc3ed50fb32ea9c809f82b3b0374"),
-      PrivateKey(hex"216414970b4216b197a1040367419ad6922f80e8b73ced083e9afe5e6ddd8e4d"),
-      PrivateKey(hex"216414970b4216b197a1040367419ad6922f80e8b73ced083e9afe5e6ddd8e4e"))
+      PrivateKey.fromHex("3580a881ac24eb00530a51235c42bcb65424ba121e2e7d910a70fa531a578d21"),
+      PrivateKey.fromHex("f6a353f7a5de654501c3495acde7450293f74d09086c2b7c9a4e524248d0daac"),
+      PrivateKey.fromHex("c2efe0095f9113bc5b9f4140958670a8ea2afc3ed50fb32ea9c809f82b3b0374"),
+      PrivateKey.fromHex("216414970b4216b197a1040367419ad6922f80e8b73ced083e9afe5e6ddd8e4d"),
+      PrivateKey.fromHex("216414970b4216b197a1040367419ad6922f80e8b73ced083e9afe5e6ddd8e4e"))
 
     val (a, b, c, d, e) = (a_priv.publicKey, b_priv.publicKey, c_priv.publicKey, d_priv.publicKey, e_priv.publicKey)
     val ann_ab = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, ShortChannelId(1), a, b, a, b, ByteVector64.Zeroes, ByteVector64.Zeroes, ByteVector64.Zeroes, ByteVector64.Zeroes)
@@ -337,7 +337,7 @@ class EclairImplSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with I
     val fResp = eclair.receive("some desc", None, None, None, Some(paymentPreimage))
     awaitCond({
       fResp.value match {
-        case Some(Success(pr)) => pr.paymentHash == Crypto.sha256(paymentPreimage)
+        case Some(Success(pr)) => pr.paymentHash == paymentPreimage.sha256()
         case _ => false
       }
     })
@@ -404,8 +404,8 @@ class EclairImplSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with I
     assert(send.userCustomTlvs.length === 1)
     val keySendTlv = send.userCustomTlvs.head
     assert(keySendTlv.tag === UInt64(5482373484L))
-    val preimage = ByteVector32(keySendTlv.value)
-    assert(Crypto.sha256(preimage) === send.paymentHash)
+    val preimage = new ByteVector32(keySendTlv.value)
+    assert(preimage.sha256() === send.paymentHash)
   }
 
   test("call sendWithPreimage, giving a specific preimage, to perform a KeySend payment") { f =>
@@ -413,8 +413,8 @@ class EclairImplSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with I
 
     val eclair = new EclairImpl(kit)
     val nodeId = randomKey.publicKey
-    val expectedPaymentPreimage = ByteVector32(hex"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
-    val expectedPaymentHash = Crypto.sha256(expectedPaymentPreimage)
+    val expectedPaymentPreimage = new ByteVector32("deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
+    val expectedPaymentHash = expectedPaymentPreimage.sha256()
 
     eclair.sendWithPreimage(None, nodeId, 12345 msat, paymentPreimage = expectedPaymentPreimage)
     val send = paymentInitiator.expectMsgType[SendPaymentRequest]
@@ -422,12 +422,12 @@ class EclairImplSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with I
     assert(send.recipientNodeId === nodeId)
     assert(send.recipientAmount === 12345.msat)
     assert(send.paymentRequest === None)
-    assert(send.paymentHash === expectedPaymentHash)
+    assert(send.paymentHash.contentEquals(expectedPaymentHash))
 
     assert(send.userCustomTlvs.length === 1)
     val keySendTlv = send.userCustomTlvs.head
     assert(keySendTlv.tag === UInt64(5482373484L))
-    assert(expectedPaymentPreimage === ByteVector32(keySendTlv.value))
+    assert(expectedPaymentPreimage === new ByteVector32(keySendTlv.value))
   }
 
   test("sign & verify an arbitrary message with the node's private key") { f =>
@@ -447,10 +447,10 @@ class EclairImplSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with I
     assert(verifiedMessage.publicKey === kit.nodeParams.nodeId)
 
     val prefix = ByteVector("Lightning Signed Message:".getBytes)
-    val dhash256 = Crypto.hash256(prefix ++ bytesMsg)
-    val expectedDigest = ByteVector32(hex"cbedbc1542fb139e2e10954f1ff9f82e8a1031cc63260636bbc45a90114552ea")
+    val dhash256 = new ByteVector32(Crypto.hash256((prefix ++ bytesMsg).toArray))
+    val expectedDigest = new ByteVector32("cbedbc1542fb139e2e10954f1ff9f82e8a1031cc63260636bbc45a90114552ea")
     assert(dhash256 === expectedDigest)
-    assert(Crypto.verifySignature(dhash256, ByteVector64(signedMessage.signature.tail), kit.nodeParams.nodeId))
+    assert(Crypto.verifySignature(dhash256, new ByteVector64(signedMessage.signature.tail.toArray), kit.nodeParams.nodeId))
   }
 
   test("verify an invalid signature for the given message") { f =>

@@ -33,6 +33,7 @@ import fr.acinq.eclair.channel.BITCOIN_PARENT_TX_CONFIRMED
 import fr.acinq.eclair.transactions.Scripts
 import org.json4s.JsonAST.{JArray, JBool, JDecimal, JInt, JString}
 import scodec.bits.ByteVector
+import fr.acinq.eclair.KotlinUtils._
 
 import scala.collection.immutable.SortedMap
 import scala.concurrent.duration._
@@ -85,7 +86,7 @@ class ZmqWatcher(chainHash: ByteVector32, blockCount: AtomicLong, client: Extend
 
     case NewBlock(block) =>
       // using a Try because in tests we generate fake blocks
-      log.debug("received blockid={}", Try(block.blockId).getOrElse(ByteVector32(ByteVector.empty)))
+      log.debug("received blockid={}", Try(block.blockId).getOrElse(ByteVector32.Zeroes))
       nextTick.map(_.cancel()) // this may fail or succeed, worse case scenario we will have two ticks in a row (no big deal)
       log.debug("scheduling a new task to check on tx confirmations")
       // we do this to avoid herd effects in testing when generating a lots of blocks in a row
@@ -185,8 +186,8 @@ class ZmqWatcher(chainHash: ByteVector32, blockCount: AtomicLong, client: Extend
         require(tx.txIn.size == 1, s"watcher only supports tx with 1 input, this tx has ${tx.txIn.size} inputs")
         val parentTxid = tx.txIn.head.outPoint.txid
         log.info(s"txid=${tx.txid} has a relative timeout of $csvTimeout blocks, watching parenttxid=$parentTxid tx={}", tx)
-        val parentPublicKey = fr.acinq.bitcoin.Script.write(fr.acinq.bitcoin.Script.pay2wsh(tx.txIn.head.witness.stack.last))
-        self ! WatchConfirmed(self, parentTxid, parentPublicKey, minDepth = 1, BITCOIN_PARENT_TX_CONFIRMED(tx))
+        val parentPublicKey = fr.acinq.bitcoin.Script.write(fr.acinq.bitcoin.Script.pay2wsh(tx.txIn.head.witness.last()))
+        self ! WatchConfirmed(self, parentTxid, ByteVector.view(parentPublicKey), minDepth = 1, BITCOIN_PARENT_TX_CONFIRMED(tx))
       } else if (cltvTimeout > blockCount) {
         log.info(s"delaying publication of txid=${tx.txid} until block=$cltvTimeout (curblock=$blockCount)")
         val block2tx1 = block2tx.updated(cltvTimeout, block2tx.getOrElse(cltvTimeout, Seq.empty[Transaction]) :+ tx)
@@ -303,8 +304,8 @@ object ZmqWatcher {
 
   private def utxo(w: Watch): Option[OutPoint] =
     w match {
-      case w: WatchSpent => Some(OutPoint(w.txId.reverse, w.outputIndex))
-      case w: WatchSpentBasic => Some(OutPoint(w.txId.reverse, w.outputIndex))
+      case w: WatchSpent => Some(new OutPoint(w.txId.reversed(), w.outputIndex))
+      case w: WatchSpentBasic => Some(new OutPoint(w.txId.reversed(), w.outputIndex))
       case _ => None
     }
 

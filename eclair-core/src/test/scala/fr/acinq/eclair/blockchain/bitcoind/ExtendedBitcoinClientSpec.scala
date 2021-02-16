@@ -29,6 +29,7 @@ import org.json4s.JsonAST._
 import org.json4s.{DefaultFormats, Formats}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuiteLike
+import fr.acinq.eclair.KotlinUtils._
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.jdk.CollectionConverters._

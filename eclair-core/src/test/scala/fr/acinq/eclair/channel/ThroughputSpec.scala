@@ -30,7 +30,7 @@ import fr.acinq.eclair.blockchain.bitcoind.ZmqWatcher
 import fr.acinq.eclair.payment.relay.Relayer
 import fr.acinq.eclair.wire.{Init, UpdateAddHtlc}
 import org.scalatest.funsuite.AnyFunSuite
-
+import KotlinUtils._
 import scala.concurrent.duration._
 import scala.util.Random
 
@@ -49,7 +49,7 @@ class ThroughputSpec extends AnyFunSuite {
       def run(h2r: Map[ByteVector32, ByteVector32]): Receive = {
         case ('add, tgt: ActorRef) =>
           val r = randomBytes32
-          val h = Crypto.sha256(r)
+          val h = r.sha256()
           tgt ! CMD_ADD_HTLC(self, 1 msat, h, CltvExpiry(1), TestConstants.emptyOnionPacket, Origin.LocalHot(self, UUID.randomUUID()))
           context.become(run(h2r + (h -> r)))
 

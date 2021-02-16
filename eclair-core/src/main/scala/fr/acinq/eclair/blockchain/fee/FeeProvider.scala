@@ -16,9 +16,11 @@
 
 package fr.acinq.eclair.blockchain.fee
 
-import fr.acinq.bitcoin.{Satoshi, SatoshiLong}
+import fr.acinq.bitcoin.{PimpSatoshi, Satoshi}
+import fr.acinq.eclair.KotlinUtils._
 
 import scala.concurrent.Future
+import scala.math.Numeric.Implicits.infixNumericOps
 
 /**
  * Created by PM on 09/07/2017.
@@ -30,14 +32,15 @@ trait FeeProvider {
 case object CannotRetrieveFeerates extends RuntimeException("cannot retrieve feerates: channels may be at risk")
 
 /** Fee rate in satoshi-per-bytes. */
-case class FeeratePerByte(feerate: Satoshi)
+case class FeeratePerByte(feerate: PimpSatoshi)
 
 object FeeratePerByte {
-  def apply(feeratePerKw: FeeratePerKw): FeeratePerByte = FeeratePerByte(FeeratePerKB(feeratePerKw).feerate / 1000)
+  def apply(feerate: Satoshi): FeeratePerByte = FeeratePerByte(PimpSatoshi(feerate))
+  def apply(feeratePerKw: FeeratePerKw): FeeratePerByte = new FeeratePerByte(FeeratePerKB(feeratePerKw).feerate / 1000)
 }
 
 /** Fee rate in satoshi-per-kilo-bytes (1 kB = 1000 bytes). */
-case class FeeratePerKB(feerate: Satoshi) extends Ordered[FeeratePerKB] {
+case class FeeratePerKB(feerate: PimpSatoshi) extends Ordered[FeeratePerKB] {
   // @formatter:off
   override def compare(that: FeeratePerKB): Int = feerate.compare(that.feerate)
   def max(other: FeeratePerKB): FeeratePerKB = if (this > other) this else other
@@ -48,13 +51,14 @@ case class FeeratePerKB(feerate: Satoshi) extends Ordered[FeeratePerKB] {
 
 object FeeratePerKB {
   // @formatter:off
-  def apply(feeratePerByte: FeeratePerByte): FeeratePerKB = FeeratePerKB(feeratePerByte.feerate * 1000)
-  def apply(feeratePerKw: FeeratePerKw): FeeratePerKB = FeeratePerKB(feeratePerKw.feerate * 4)
+  def apply(feerate: Satoshi): FeeratePerKB = new FeeratePerKB(PimpSatoshi(feerate))
+  def apply(feeratePerByte: FeeratePerByte): FeeratePerKB = new FeeratePerKB(feeratePerByte.feerate * 1000)
+  def apply(feeratePerKw: FeeratePerKw): FeeratePerKB = new FeeratePerKB(feeratePerKw.feerate * 4)
   // @formatter:on
 }
 
 /** Fee rate in satoshi-per-kilo-weight. */
-case class FeeratePerKw(feerate: Satoshi) extends Ordered[FeeratePerKw] {
+case class FeeratePerKw(feerate: PimpSatoshi) extends Ordered[FeeratePerKw] {
   // @formatter:off
   override def compare(that: FeeratePerKw): Int = feerate.compare(that.feerate)
   def max(other: FeeratePerKw): FeeratePerKw = if (this > other) this else other
@@ -97,6 +101,7 @@ object FeeratePerKw {
   // @formatter:off
   def apply(feeratePerKB: FeeratePerKB): FeeratePerKw = MinimumFeeratePerKw.max(FeeratePerKw(feeratePerKB.feerate / 4))
   def apply(feeratePerByte: FeeratePerByte): FeeratePerKw = FeeratePerKw(FeeratePerKB(feeratePerByte))
+  def apply(feerate: Satoshi): FeeratePerKw = new FeeratePerKw(PimpSatoshi(feerate))
   // @formatter:on
 }
 

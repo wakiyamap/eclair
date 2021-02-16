@@ -25,6 +25,7 @@ import fr.acinq.eclair.TestKitBaseClass
 import grizzled.slf4j.Logging
 import org.scalatest.funsuite.AnyFunSuiteLike
 import scodec.bits._
+import fr.acinq.eclair.KotlinUtils._
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
@@ -53,7 +54,7 @@ class ElectrumClientSpec extends TestKitBaseClass with AnyFunSuiteLike with Logg
     hex"86858812c3837d209110f7ea79de485abdfd22039467a8aa15a8d85856ee7d30",
     hex"de20eb85f2e9ad525a6fb5c618682b6bdce2fa83df836a698f31575c4e5b3d38",
     hex"98bd1048e04ff1b0af5856d9890cd708d8d67ad6f3a01f777130fbc16810eeb3")
-    .map(ByteVector32(_))
+    .map(new ByteVector32(_))
 
   override protected def beforeAll(): Unit = {
     client = system.actorOf(Props(new ElectrumClient(new InetSocketAddress("electrum.acinq.co", 50002), SSL.STRICT)), "electrum-client")
@@ -83,7 +84,7 @@ class ElectrumClientSpec extends TestKitBaseClass with AnyFunSuiteLike with Logg
   test("get header") {
     probe.send(client, GetHeader(100000))
     val GetHeaderResponse(height, header) = probe.expectMsgType[GetHeaderResponse]
-    assert(header.blockId == ByteVector32(hex"000000000003ba27aa200b1cecaad478d2b00432346c3f1f3986da1afd33e506"))
+    assert(header.blockId == new ByteVector32("000000000003ba27aa200b1cecaad478d2b00432346c3f1f3986da1afd33e506"))
   }
 
   test("get headers") {
@@ -100,7 +101,7 @@ class ElectrumClientSpec extends TestKitBaseClass with AnyFunSuiteLike with Logg
     assert(response.txid == referenceTx.txid)
     assert(response.block_height == 500000)
     assert(response.pos == 2690)
-    assert(response.root == ByteVector32(hex"1f6231ed3de07345b607ec2a39b2d01bec2fe10dfb7f516ba4958a42691c9531"))
+    assert(response.root == new ByteVector32("1f6231ed3de07345b607ec2a39b2d01bec2fe10dfb7f516ba4958a42691c9531"))
   }
 
   test("header subscription") {

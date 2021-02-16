@@ -17,10 +17,8 @@
 package fr.acinq.eclair.channel
 
 import java.util.UUID
-
 import akka.actor.{ActorRef, PossiblyHarmful}
-import fr.acinq.bitcoin.Crypto.PublicKey
-import fr.acinq.bitcoin.{ByteVector32, DeterministicWallet, OutPoint, Satoshi, Transaction}
+import fr.acinq.bitcoin.{ByteVector32, DeterministicWallet, KeyPath, OutPoint, PublicKey, Satoshi, Transaction}
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.payment.OutgoingPacket.Upstream
 import fr.acinq.eclair.router.Announcements
@@ -378,7 +376,7 @@ final case class DATA_WAIT_FOR_REMOTE_PUBLISH_FUTURE_COMMITMENT(commitments: Com
  *                 channel was created. See [[ChannelVersion]] for permanent features associated to a channel.
  */
 final case class LocalParams(nodeId: PublicKey,
-                             fundingKeyPath: DeterministicWallet.KeyPath,
+                             fundingKeyPath: KeyPath,
                              dustLimit: Satoshi,
                              maxHtlcValueInFlightMsat: UInt64, // this is not MilliSatoshi because it can exceed the total amount of MilliSatoshi
                              channelReserve: Satoshi,

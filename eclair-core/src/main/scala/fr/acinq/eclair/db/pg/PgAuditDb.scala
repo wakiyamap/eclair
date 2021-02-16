@@ -16,7 +16,7 @@
 
 package fr.acinq.eclair.db.pg
 
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.PublicKey
 import fr.acinq.bitcoin.{ByteVector32, Satoshi, SatoshiLong}
 import fr.acinq.eclair.channel.{ChannelErrorOccurred, LocalError, NetworkFeePaid, RemoteError}
 import fr.acinq.eclair.db.Monitoring.Metrics.withMetrics
@@ -24,6 +24,7 @@ import fr.acinq.eclair.db._
 import fr.acinq.eclair.payment._
 import fr.acinq.eclair.{MilliSatoshi, MilliSatoshiLong}
 import grizzled.slf4j.Logging
+import fr.acinq.eclair.KotlinUtils._
 
 import java.util.UUID
 import javax.sql.DataSource
@@ -194,7 +195,7 @@ class PgAuditDb(implicit ds: DataSource) extends AuditDb with Logging {
               rs.getByteVector32FromHex("payment_hash"),
               rs.getByteVector32FromHex("payment_preimage"),
               MilliSatoshi(rs.getLong("recipient_amount_msat")),
-              PublicKey(rs.getByteVectorFromHex("recipient_node_id")),
+              new PublicKey(rs.getByteVectorFromHex("recipient_node_id").toArray),
               Seq(part))
           }
           sentByParentId = sentByParentId + (parentId -> sent)
@@ -269,10 +270,10 @@ class PgAuditDb(implicit ds: DataSource) extends AuditDb with Logging {
         var q: Queue[NetworkFee] = Queue()
         while (rs.next()) {
           q = q :+ NetworkFee(
-            remoteNodeId = PublicKey(rs.getByteVectorFromHex("node_id")),
+            remoteNodeId = new PublicKey(rs.getByteVectorFromHex("node_id").toArray),
             channelId = rs.getByteVector32FromHex("channel_id"),
             txId = rs.getByteVector32FromHex("tx_id"),
-            fee = Satoshi(rs.getLong("fee_sat")),
+            fee = new Satoshi(rs.getLong("fee_sat")),
             txType = rs.getString("tx_type"),
             timestamp = rs.getLong("timestamp"))
         }
@@ -282,7 +283,7 @@ class PgAuditDb(implicit ds: DataSource) extends AuditDb with Logging {
 
   override def stats(from: Long, to: Long): Seq[Stats] = {
     val networkFees = listNetworkFees(from, to).foldLeft(Map.empty[ByteVector32, Satoshi]) { case (feeByChannelId, f) =>
-      feeByChannelId + (f.channelId -> (feeByChannelId.getOrElse(f.channelId, 0 sat) + f.fee))
+      feeByChannelId + (f.channelId -> (feeByChannelId.getOrElse(f.channelId, 0 sat) plus f.fee))
     }
     case class Relayed(amount: MilliSatoshi, fee: MilliSatoshi, direction: String)
     val relayed = listRelayed(from, to).foldLeft(Map.empty[ByteVector32, Seq[Relayed]]) { case (previous, e) =>

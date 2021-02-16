@@ -16,19 +16,22 @@
 
 package fr.acinq.eclair.router
 
-import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey, sha256, verifySignature}
+import fr.acinq.bitcoin.{PrivateKey, PublicKey}
+import fr.acinq.bitcoin.Crypto.{sha256, verifySignature}
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, LexicographicalOrdering}
 import fr.acinq.eclair.wire._
 import fr.acinq.eclair.{CltvExpiryDelta, Features, MilliSatoshi, ShortChannelId, serializationResult}
 import scodec.bits.{BitVector, ByteVector}
 import shapeless.HNil
-
+import fr.acinq.eclair.KotlinUtils._
 import scala.concurrent.duration._
 
 /**
  * Created by PM on 03/02/2017.
  */
 object Announcements {
+  private implicit def array2acinqbytevector(input: Array[Byte]): ByteVector = ByteVector.view(input)
+  private implicit def array2acinqbytevector64(input: Array[Byte]): ByteVector64 = new ByteVector64(input)
 
   def channelAnnouncementWitnessEncode(chainHash: ByteVector32, shortChannelId: ShortChannelId, nodeId1: PublicKey, nodeId2: PublicKey, bitcoinKey1: PublicKey, bitcoinKey2: PublicKey, features: Features, unknownFields: ByteVector): ByteVector =
     sha256(sha256(serializationResult(LightningMessageCodecs.channelAnnouncementWitnessCodec.encode(features :: chainHash :: shortChannelId :: nodeId1 :: nodeId2 :: bitcoinKey1 :: bitcoinKey2 :: unknownFields :: HNil))))
@@ -46,7 +49,7 @@ object Announcements {
       channelAnnouncementWitnessEncode(chainHash, shortChannelId, remoteNodeId, localNodeId, remoteFundingKey, localFundingKey, features, unknownFields = ByteVector.empty)
     }
 
-  def signChannelAnnouncement(witness: ByteVector, key: PrivateKey): ByteVector64 = Crypto.sign(witness, key)
+  def signChannelAnnouncement(witness: ByteVector, key: PrivateKey): ByteVector64 = Crypto.sign(witness.toArray, key)
 
   def makeChannelAnnouncement(chainHash: ByteVector32, shortChannelId: ShortChannelId, localNodeId: PublicKey, remoteNodeId: PublicKey, localFundingKey: PublicKey, remoteFundingKey: PublicKey, localNodeSignature: ByteVector64, remoteNodeSignature: ByteVector64, localBitcoinSignature: ByteVector64, remoteBitcoinSignature: ByteVector64): ChannelAnnouncement = {
     val (nodeId1, nodeId2, bitcoinKey1, bitcoinKey2, nodeSignature1, nodeSignature2, bitcoinSignature1, bitcoinSignature2) =
@@ -73,7 +76,7 @@ object Announcements {
   def makeNodeAnnouncement(nodeSecret: PrivateKey, alias: String, color: Color, nodeAddresses: List[NodeAddress], features: Features, timestamp: Long = System.currentTimeMillis.milliseconds.toSeconds): NodeAnnouncement = {
     require(alias.length <= 32)
     val witness = nodeAnnouncementWitnessEncode(timestamp, nodeSecret.publicKey, color, alias, features, nodeAddresses, unknownFields = ByteVector.empty)
-    val sig = Crypto.sign(witness, nodeSecret)
+    val sig = Crypto.sign(witness.toArray, nodeSecret)
     NodeAnnouncement(
       signature = sig,
       timestamp = timestamp,
@@ -130,7 +133,7 @@ object Announcements {
     val htlcMaximumMsatOpt = Some(htlcMaximumMsat)
 
     val witness = channelUpdateWitnessEncode(chainHash, shortChannelId, timestamp, messageFlags, channelFlags, cltvExpiryDelta, htlcMinimumMsat, feeBaseMsat, feeProportionalMillionths, htlcMaximumMsatOpt, unknownFields = ByteVector.empty)
-    val sig = Crypto.sign(witness, nodeSecret)
+    val sig = Crypto.sign(witness.toArray, nodeSecret)
     ChannelUpdate(
       signature = sig,
       chainHash = chainHash,
@@ -148,19 +151,19 @@ object Announcements {
 
   def checkSigs(ann: ChannelAnnouncement): Boolean = {
     val witness = channelAnnouncementWitnessEncode(ann.chainHash, ann.shortChannelId, ann.nodeId1, ann.nodeId2, ann.bitcoinKey1, ann.bitcoinKey2, ann.features, ann.unknownFields)
-    verifySignature(witness, ann.nodeSignature1, ann.nodeId1) &&
-      verifySignature(witness, ann.nodeSignature2, ann.nodeId2) &&
-      verifySignature(witness, ann.bitcoinSignature1, ann.bitcoinKey1) &&
-      verifySignature(witness, ann.bitcoinSignature2, ann.bitcoinKey2)
+    verifySignature(witness.toArray, ann.nodeSignature1, ann.nodeId1) &&
+      verifySignature(witness.toArray, ann.nodeSignature2, ann.nodeId2) &&
+      verifySignature(witness.toArray, ann.bitcoinSignature1, ann.bitcoinKey1) &&
+      verifySignature(witness.toArray, ann.bitcoinSignature2, ann.bitcoinKey2)
   }
 
   def checkSig(ann: NodeAnnouncement): Boolean = {
     val witness = nodeAnnouncementWitnessEncode(ann.timestamp, ann.nodeId, ann.rgbColor, ann.alias, ann.features, ann.addresses, ann.unknownFields)
-    verifySignature(witness, ann.signature, ann.nodeId)
+    verifySignature(witness.toArray, ann.signature, ann.nodeId)
   }
 
   def checkSig(upd: ChannelUpdate, nodeId: PublicKey): Boolean = {
     val witness = channelUpdateWitnessEncode(upd.chainHash, upd.shortChannelId, upd.timestamp, upd.messageFlags, upd.channelFlags, upd.cltvExpiryDelta, upd.htlcMinimumMsat, upd.feeBaseMsat, upd.feeProportionalMillionths, upd.htlcMaximumMsat, upd.unknownFields)
-    verifySignature(witness, upd.signature, nodeId)
+    verifySignature(witness.toArray, upd.signature, nodeId)
   }
 }

@@ -16,7 +16,7 @@
 
 package fr.acinq.eclair.db
 
-import fr.acinq.bitcoin.Crypto.PrivateKey
+import fr.acinq.bitcoin.PrivateKey
 import fr.acinq.bitcoin.{Block, ByteVector32, Crypto}
 import fr.acinq.eclair.TestConstants.{TestPgDatabases, TestSqliteDatabases, forAllDbs}
 import fr.acinq.eclair.crypto.Sphinx
@@ -25,6 +25,7 @@ import fr.acinq.eclair.payment._
 import fr.acinq.eclair.router.Router.{ChannelHop, NodeHop}
 import fr.acinq.eclair.wire.{ChannelUpdate, UnknownNextPeer}
 import fr.acinq.eclair.{CltvExpiryDelta, MilliSatoshiLong, ShortChannelId, TestConstants, randomBytes32, randomBytes64, randomKey}
+import fr.acinq.eclair.KotlinUtils._
 import org.scalatest.funsuite.AnyFunSuite
 
 import java.util.UUID
@@ -121,9 +122,9 @@ class SqlitePaymentsDbSpec extends AnyFunSuite {
         val id1 = UUID.randomUUID()
         val id2 = UUID.randomUUID()
         val id3 = UUID.randomUUID()
-        val ps1 = OutgoingPayment(id1, id1, None, randomBytes32, PaymentType.Standard, 561 msat, 561 msat, PrivateKey(ByteVector32.One).publicKey, 1000, None, OutgoingPaymentStatus.Pending)
-        val ps2 = OutgoingPayment(id2, id2, None, randomBytes32, PaymentType.Standard, 1105 msat, 1105 msat, PrivateKey(ByteVector32.One).publicKey, 1010, None, OutgoingPaymentStatus.Failed(Nil, 1050))
-        val ps3 = OutgoingPayment(id3, id3, None, paymentHash1, PaymentType.Standard, 1729 msat, 1729 msat, PrivateKey(ByteVector32.One).publicKey, 1040, None, OutgoingPaymentStatus.Succeeded(preimage1, 0 msat, Nil, 1060))
+        val ps1 = OutgoingPayment(id1, id1, None, randomBytes32, PaymentType.Standard, 561 msat, 561 msat, new PrivateKey(ByteVector32.One).publicKey, 1000, None, OutgoingPaymentStatus.Pending)
+        val ps2 = OutgoingPayment(id2, id2, None, randomBytes32, PaymentType.Standard, 1105 msat, 1105 msat, new PrivateKey(ByteVector32.One).publicKey, 1010, None, OutgoingPaymentStatus.Failed(Nil, 1050))
+        val ps3 = OutgoingPayment(id3, id3, None, paymentHash1, PaymentType.Standard, 1729 msat, 1729 msat, new PrivateKey(ByteVector32.One).publicKey, 1040, None, OutgoingPaymentStatus.Succeeded(preimage1, 0 msat, Nil, 1060))
         val i1 = PaymentRequest(Block.TestnetGenesisBlock.hash, Some(12345678 msat), paymentHash1, davePriv, "Some invoice", CltvExpiryDelta(18), expirySeconds = None, timestamp = 1)
         val pr1 = IncomingPayment(i1, preimage1, PaymentType.Standard, i1.timestamp.seconds.toMillis, IncomingPaymentStatus.Received(12345678 msat, 1090))
         val i2 = PaymentRequest(Block.TestnetGenesisBlock.hash, Some(12345678 msat), paymentHash2, carolPriv, "Another invoice", CltvExpiryDelta(18), expirySeconds = Some(30), timestamp = 1)
@@ -464,7 +465,7 @@ class SqlitePaymentsDbSpec extends AnyFunSuite {
     // -- 1st check: result contains 2 incoming PAID, 1 outgoing PENDING. Outgoing1 must not be overridden by Outgoing2
     val check1 = db.listPaymentsOverview(10)
     assert(check1.size == 3)
-    assert(check1.head.paymentHash == paymentHash1)
+    assert(check1.head.paymentHash.contentEquals(paymentHash1))
     assert(check1.head.isInstanceOf[PlainOutgoingPayment])
     assert(check1.head.asInstanceOf[PlainOutgoingPayment].status == OutgoingPaymentStatus.Pending)
 
@@ -484,19 +485,19 @@ class SqlitePaymentsDbSpec extends AnyFunSuite {
     // -- 2nd check: result contains 2 incoming PAID, 1 outgoing FAILED and 1 outgoing SUCCEEDED, in correct order
     val check2 = db.listPaymentsOverview(10)
     assert(check2.size == 4)
-    assert(check2.head.paymentHash == paymentHash1)
+    assert(check2.head.paymentHash.contentEquals(paymentHash1))
     assert(check2.head.isInstanceOf[PlainOutgoingPayment])
     assert(check2.head.asInstanceOf[PlainOutgoingPayment].status.isInstanceOf[OutgoingPaymentStatus.Succeeded])
 
-    assert(check2(1).paymentHash == paymentHash1)
+    assert(check2(1).paymentHash.contentEquals(paymentHash1))
     assert(check2(1).isInstanceOf[PlainOutgoingPayment])
     assert(check2(1).asInstanceOf[PlainOutgoingPayment].status.isInstanceOf[OutgoingPaymentStatus.Failed])
 
-    assert(check2(2).paymentHash == paidInvoice2.paymentHash)
+    assert(check2(2).paymentHash.contentEquals(paidInvoice2.paymentHash))
     assert(check2(2).isInstanceOf[PlainIncomingPayment])
     assert(check2(2).asInstanceOf[PlainIncomingPayment].status.isInstanceOf[IncomingPaymentStatus.Received])
 
-    assert(check2(3).paymentHash == paidInvoice1.paymentHash)
+    assert(check2(3).paymentHash.contentEquals(paidInvoice1.paymentHash))
     assert(check2(3).isInstanceOf[PlainIncomingPayment])
     assert(check2(3).asInstanceOf[PlainIncomingPayment].status.isInstanceOf[IncomingPaymentStatus.Received])
   }

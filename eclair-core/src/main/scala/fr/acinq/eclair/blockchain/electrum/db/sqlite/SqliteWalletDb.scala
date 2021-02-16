@@ -39,7 +39,7 @@ class SqliteWalletDb(sqlite: Connection) extends WalletDb {
   override def addHeader(height: Int, header: BlockHeader): Unit = {
     using(sqlite.prepareStatement("INSERT OR IGNORE INTO headers VALUES (?, ?, ?)")) { statement =>
       statement.setInt(1, height)
-      statement.setBytes(2, header.hash.toArray)
+      statement.setBytes(2, header.hash.toByteArray)
       statement.setBytes(3, BlockHeader.write(header).toArray)
       statement.executeUpdate()
     }
@@ -50,7 +50,7 @@ class SqliteWalletDb(sqlite: Connection) extends WalletDb {
       var height = startHeight
       headers.foreach(header => {
         statement.setInt(1, height)
-        statement.setBytes(2, header.hash.toArray)
+        statement.setBytes(2, header.hash.toByteArray)
         statement.setBytes(3, BlockHeader.write(header).toArray)
         statement.addBatch()
         height = height + 1
@@ -73,7 +73,7 @@ class SqliteWalletDb(sqlite: Connection) extends WalletDb {
 
   override def getHeader(blockHash: ByteVector32): Option[(Int, BlockHeader)] = {
     using(sqlite.prepareStatement("SELECT height, header FROM headers WHERE block_hash = ?")) { statement =>
-      statement.setBytes(1, blockHash.toArray)
+      statement.setBytes(1, blockHash.toByteArray)
       val rs = statement.executeQuery()
       if (rs.next()) {
         Some((rs.getInt("height"), BlockHeader.read(rs.getBytes("header"))))

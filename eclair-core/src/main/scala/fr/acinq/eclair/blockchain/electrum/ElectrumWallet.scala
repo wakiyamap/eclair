@@ -17,9 +17,10 @@
 package fr.acinq.eclair.blockchain.electrum
 
 import akka.actor.{ActorRef, FSM, PoisonPill, Props}
-import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
+import fr.acinq.bitcoin
+import fr.acinq.bitcoin.{Base58, Base58Check, Block, ByteVector32, Crypto, DeterministicWallet, KeyPath, OP_PUSHDATA, OutPoint, PrivateKey, PublicKey, Satoshi, SatoshiLong, Script, ScriptElt, ScriptWitness, SigVersion, Transaction, TxIn, TxOut}
 import fr.acinq.bitcoin.DeterministicWallet.{ExtendedPrivateKey, derivePrivateKey, hardened}
-import fr.acinq.bitcoin.{Base58, Base58Check, Block, ByteVector32, Crypto, DeterministicWallet, OP_PUSHDATA, OutPoint, SIGHASH_ALL, Satoshi, SatoshiLong, Script, ScriptElt, ScriptWitness, SigVersion, Transaction, TxIn, TxOut}
+import fr.acinq.bitcoin.SigHash.SIGHASH_ALL
 import fr.acinq.eclair.blockchain.bitcoind.rpc.Error
 import fr.acinq.eclair.blockchain.electrum.ElectrumClient._
 import fr.acinq.eclair.blockchain.electrum.db.{HeaderDb, WalletDb}
@@ -27,6 +28,7 @@ import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.transactions.Transactions
 import grizzled.slf4j.Logging
 import scodec.bits.ByteVector
+import fr.acinq.eclair.KotlinUtils._
 
 import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
@@ -257,9 +259,9 @@ class ElectrumWallet(seed: ByteVector, client: ActorRef, params: ElectrumWallet.
       val (newAccountKeys, newChangeKeys) = data.status.get(Try(ByteVector32.fromValidHex(status)).getOrElse(ByteVector32.Zeroes)) match {
         case None =>
           // first time this script hash is used, need to generate a new key
-          val newKey = if (isChange) derivePrivateKey(changeMaster, data.changeKeys.last.path.lastChildNumber + 1) else derivePrivateKey(accountMaster, data.accountKeys.last.path.lastChildNumber + 1)
+          val newKey = if (isChange) derivePrivateKey(changeMaster, data.changeKeys.last.path.getLastChildNumber + 1) else derivePrivateKey(accountMaster, data.accountKeys.last.path.getLastChildNumber + 1)
           val newScriptHash = computeScriptHashFromPublicKey(newKey.publicKey)
-          log.info(s"generated key with index=${newKey.path.lastChildNumber} scriptHash=$newScriptHash key=${segwitAddress(newKey, chainHash)} isChange=$isChange")
+          log.info(s"generated key with index=${newKey.path.getLastChildNumber} scriptHash=$newScriptHash key=${segwitAddress(newKey, chainHash)} isChange=$isChange")
           // listens to changes for the newly generated key
           client ! ElectrumClient.ScriptHashSubscription(newScriptHash, self)
           if (isChange) (data.accountKeys, data.changeKeys :+ newKey) else (data.accountKeys :+ newKey, data.changeKeys)
@@ -521,6 +523,9 @@ object ElectrumWallet {
   case class CompleteTransactionResponse(tx: Transaction, fee: Satoshi, error: Option[Throwable]) extends Response
 
   case class SendAll(publicKeyScript: ByteVector, feeRatePerKw: FeeratePerKw) extends Request
+  object SendAll {
+    def apply(publicKeyScript: Array[Byte], feeRatePerKw: FeeratePerKw): SendAll = new SendAll(ByteVector.view(publicKeyScript), feeRatePerKw)
+  }
   case class SendAllResponse(tx: Transaction, fee: Satoshi) extends Response
 
   case class CommitTransaction(tx: Transaction) extends Request
@@ -586,11 +591,13 @@ object ElectrumWallet {
    * @param key public key
    * @return the hash of the public key script for this key, as used by Electrum's hash-based methods
    */
-  def computeScriptHashFromPublicKey(key: PublicKey): ByteVector32 = Crypto.sha256(Script.write(computePublicKeyScript(key))).reverse
+  def computeScriptHashFromPublicKey(key: PublicKey): ByteVector32 = new ByteVector32(Crypto.sha256(Script.write(computePublicKeyScript(key)))).reversed()
 
-  def accountPath(chainHash: ByteVector32): List[Long] = (chainHash: @unchecked) match {
-    case Block.RegtestGenesisBlock.hash | Block.TestnetGenesisBlock.hash => hardened(49) :: hardened(1) :: hardened(0) :: Nil
-    case Block.LivenetGenesisBlock.hash => hardened(49) :: hardened(0) :: hardened(0) :: Nil
+  def accountPath(chainHash: ByteVector32): KeyPath = chainHash match {
+    // hardened(49) :: hardened(1) :: hardened(0) :: Nil
+    case Block.RegtestGenesisBlock.hash | Block.TestnetGenesisBlock.hash => new KeyPath("m/49'/1'/0'") //
+      // hardened(49) :: hardened(0) :: hardened(0) :: Nil
+    case Block.LivenetGenesisBlock.hash =>  new KeyPath("m/49'/0'/0'")
   }
 
   /**
@@ -599,7 +606,9 @@ object ElectrumWallet {
    * @param master master key
    * @return the BIP49 account key for this master key: m/49'/1'/0'/0 on testnet/regtest, m/49'/0'/0'/0 on mainnet
    */
-  def accountKey(master: ExtendedPrivateKey, chainHash: ByteVector32) = DeterministicWallet.derivePrivateKey(master, accountPath(chainHash) ::: 0L :: Nil)
+  def accountKey(master: ExtendedPrivateKey, chainHash: ByteVector32) = {
+    DeterministicWallet.derivePrivateKey(master, accountPath(chainHash).append(0))
+  }
 
 
   /**
@@ -624,9 +633,9 @@ object ElectrumWallet {
    * @param master master key
    * @return the BIP49 change key for this master key: m/49'/1'/0'/1 on testnet/regtest, m/49'/0'/0'/1 on mainnet
    */
-  def changeKey(master: ExtendedPrivateKey, chainHash: ByteVector32) = DeterministicWallet.derivePrivateKey(master, accountPath(chainHash) ::: 1L :: Nil)
+  def changeKey(master: ExtendedPrivateKey, chainHash: ByteVector32) = DeterministicWallet.derivePrivateKey(master, accountPath(chainHash).append(1L))
 
-  def totalAmount(utxos: Seq[Utxo]): Satoshi = Satoshi(utxos.map(_.item.value).sum)
+  def totalAmount(utxos: Seq[Utxo]): Satoshi = new Satoshi(utxos.map(_.item.value).sum)
 
   def totalAmount(utxos: Set[Utxo]): Satoshi = totalAmount(utxos.toSeq)
 
@@ -636,7 +645,7 @@ object ElectrumWallet {
    * @param feeRatePerKw fee rate
    * @return the fee for this tx weight
    */
-  def computeFee(weight: Int, feeRatePerKw: Long): Satoshi = Satoshi((weight * feeRatePerKw) / 1000)
+  def computeFee(weight: Int, feeRatePerKw: Long): Satoshi = new Satoshi((weight * feeRatePerKw) / 1000)
 
   /**
    *
@@ -647,11 +656,16 @@ object ElectrumWallet {
     Try {
       // we're looking for tx that spend a pay2sh-of-p2wkph output
       require(txIn.witness.stack.size == 2)
-      val sig = txIn.witness.stack(0)
-      val pub = txIn.witness.stack(1)
-      val OP_PUSHDATA(script, _) :: Nil = Script.parse(txIn.signatureScript)
-      val publicKey = PublicKey(pub)
-      if (Script.write(Script.pay2wpkh(publicKey)) == script) {
+      val sig = txIn.witness.stack.get(0)
+      val pub = txIn.witness.stack.get(1)
+      val parsed = Script.parse(txIn.signatureScript)
+      require(parsed.size() == 1)
+      val script = parsed.get(0) match {
+        case push: OP_PUSHDATA => push.data
+      }
+      //val OP_PUSHDATA(script, _) :: Nil = Script.parse(txIn.signatureScript)
+      val publicKey = new PublicKey(pub)
+      if (script.contentEquals(Script.write(Script.pay2wpkh(publicKey)))) {
         Some(publicKey)
       } else None
     } getOrElse None
@@ -713,7 +727,7 @@ object ElectrumWallet {
 
     lazy val firstUnusedChangeKeys = changeKeys.find(key => status.get(computeScriptHashFromPublicKey(key.publicKey)) == Some(""))
 
-    lazy val publicScriptMap = (accountKeys ++ changeKeys).map(key => Script.write(computePublicKeyScript(key.publicKey)) -> key).toMap
+    lazy val publicScriptMap = (accountKeys ++ changeKeys).map(key => ByteVector.view(Script.write(computePublicKeyScript(key.publicKey))) -> key).toMap
 
     lazy val utxos = history.keys.toSeq.map(scriptHash => getUtxos(scriptHash)).flatten
 
@@ -769,7 +783,7 @@ object ElectrumWallet {
 
     def currentChangeAddress = segwitAddress(currentChangeKey, chainHash)
 
-    def isMine(txIn: TxIn): Boolean = extractPubKeySpentFrom(txIn).exists(pub => publicScriptMap.contains(Script.write(computePublicKeyScript(pub))))
+    def isMine(txIn: TxIn): Boolean = extractPubKeySpentFrom(txIn).exists(pub => publicScriptMap.contains(ByteVector.view(Script.write(computePublicKeyScript(pub)))))
 
     def isSpend(txIn: TxIn, publicKey: PublicKey): Boolean = extractPubKeySpentFrom(txIn).contains(publicKey)
 
@@ -861,8 +875,8 @@ object ElectrumWallet {
           val unconfirmedSpents = findOurSpentOutputs(unconfirmedTxs)
           val unconfirmedReceived = unconfirmedTxs.flatMap(_.txOut).filter(txOut => isReceive(txOut, scriptHash))
 
-          val confirmedBalance = confirmedReceived.map(_.amount).sum - confirmedSpents.map(_.amount).sum
-          val unconfirmedBalance = unconfirmedReceived.map(_.amount).sum - unconfirmedSpents.map(_.amount).sum
+          val confirmedBalance = confirmedReceived.map(_.amount).sum minus confirmedSpents.map(_.amount).sum
+          val unconfirmedBalance = unconfirmedReceived.map(_.amount).sum minus unconfirmedSpents.map(_.amount).sum
 
           logger.debug(s"scriptHash=$scriptHash confirmedBalance=$confirmedBalance unconfirmedBalance=$unconfirmedBalance)")
           (confirmedBalance, unconfirmedBalance)
@@ -880,7 +894,7 @@ object ElectrumWallet {
       // same balance we don't return the correct aggregated balance
       val balances = (accountKeyMap.keys ++ changeKeyMap.keys).toList.map(scriptHash => balance(scriptHash))
       balances.foldLeft((0 sat, 0 sat)) {
-        case ((confirmed, unconfirmed), (confirmed1, unconfirmed1)) => (confirmed + confirmed1, unconfirmed + unconfirmed1)
+        case ((confirmed, unconfirmed), (confirmed1, unconfirmed1)) => (confirmed plus confirmed1, unconfirmed plus unconfirmed1)
       }
     }
 
@@ -904,7 +918,7 @@ object ElectrumWallet {
         val sent = ourInputs.map(txIn => transactions(txIn.outPoint.txid).txOut(txIn.outPoint.index.toInt)).map(_.amount).sum
         val received = tx.txOut.filter(isMine).map(_.amount).sum
         // if all the inputs were ours, we can compute the fee, otherwise we can't
-        val fee_opt = if (ourInputs.size == tx.txIn.size) Some(sent - tx.txOut.map(_.amount).sum) else None
+        val fee_opt = if (ourInputs.size == tx.txIn.size) Some(sent minus tx.txOut.map(_.amount).sum) else None
         Some((received, sent, fee_opt))
       }
     }
@@ -916,14 +930,24 @@ object ElectrumWallet {
      * @return a tx where all utxos have been added as inputs, signed with dummy invalid signatures. This
      *         is used to estimate the weight of the signed transaction
      */
-    def addUtxosWithDummySig(tx: Transaction, utxos: Seq[Utxo]): Transaction =
-      tx.copy(txIn = utxos.map { case utxo =>
-        // we use dummy signature here, because the result is only used to estimate fees
-        val sig = ByteVector.fill(71)(1)
-        val sigScript = Script.write(OP_PUSHDATA(Script.write(Script.pay2wpkh(utxo.key.publicKey))) :: Nil)
-        val witness = ScriptWitness(sig :: utxo.key.publicKey.value :: Nil)
-        TxIn(utxo.outPoint, signatureScript = sigScript, sequence = TxIn.SEQUENCE_FINAL, witness = witness)
-      })
+    def addUtxosWithDummySig(tx: Transaction, utxos: Seq[Utxo]): Transaction = {
+
+      val inputs = utxos.map { case utxo =>
+        val sig = new Array[Byte](71)
+        val script = Script.write(Script.pay2wpkh(utxo.key.publicKey))
+        val sigScript = Script.write(new OP_PUSHDATA(script) :: Nil)
+        val witness = new ScriptWitness().push(sig).push(utxo.key.publicKey.value)
+        new TxIn(utxo.outPoint, new bitcoin.ByteVector(sigScript), TxIn.SEQUENCE_FINAL, witness)
+      }
+      tx.updateInputs(inputs)
+      //      tx.copy(txIn = utxos.map { case utxo =>
+      //        // we use dummy signature here, because the result is only used to estimate fees
+      //        val sig = ByteVector.fill(71)(1)
+      //        val sigScript = Script.write(OP_PUSHDATA(Script.write(Script.pay2wpkh(utxo.key.publicKey))) :: Nil)
+      //        val witness = ScriptWitness(sig :: utxo.key.publicKey.value :: Nil)
+      //        new TxIn(utxo.outPoint, sigScript, TxIn.SEQUENCE_FINAL, witness)
+      //      })
+    }
 
     /**
      *
@@ -958,29 +982,29 @@ object ElectrumWallet {
         Transactions.weight2fee(feeRatePerKw, tx2.weight())
       }
 
-      val dummyChange = TxOut(Satoshi(0), computePublicKeyScript(currentChangeKey.publicKey))
+      val dummyChange = new TxOut(new Satoshi(0), computePublicKeyScript(currentChangeKey.publicKey))
 
       @tailrec
       def loop(current: Seq[Utxo], remaining: Seq[Utxo]): (Seq[Utxo], Option[TxOut]) = {
         totalAmount(current) match {
-          case total if total - computeFee(current, None) < amount && remaining.isEmpty =>
+          case total if (total minus computeFee(current, None)) < amount && remaining.isEmpty =>
             // not enough funds to send amount and pay fees even without a change output
             throw new IllegalArgumentException("insufficient funds")
-          case total if total - computeFee(current, None) < amount =>
+          case total if (total minus computeFee(current, None)) < amount =>
             // not enough funds, try with an additional input
             loop(remaining.head +: current, remaining.tail)
-          case total if total - computeFee(current, None) <= amount + dustLimit =>
+          case total if (total minus computeFee(current, None)) <= (amount plus dustLimit) =>
             // change output would be below dust, we don't add one and just overpay fees
             (current, None)
-          case total if total - computeFee(current, Some(dummyChange)) <= amount + dustLimit && remaining.isEmpty =>
+          case total if (total minus computeFee(current, Some(dummyChange))) <= (amount plus dustLimit) && remaining.isEmpty =>
             // change output is above dust limit but cannot pay for it's own fee, and we have no more utxos => we overpay a bit
             (current, None)
-          case total if total - computeFee(current, Some(dummyChange)) <= amount + dustLimit =>
+          case total if (total minus computeFee(current, Some(dummyChange))) <= (amount plus dustLimit) =>
             // try with an additional input
             loop(remaining.head +: current, remaining.tail)
           case total =>
             val fee = computeFee(current, Some(dummyChange))
-            val change = dummyChange.copy(amount = total - amount - fee)
+            val change = dummyChange.updateAmount(total minus amount minus fee)
             (current, Some(change))
         }
       }
@@ -994,20 +1018,29 @@ object ElectrumWallet {
 
       // and add the completed tx to the locks
       val data1 = this.copy(locks = this.locks + tx3)
-      val fee = selected.map(s => Satoshi(s.item.value)).sum - tx3.txOut.map(_.amount).sum
+      val fee = selected.map(s => new Satoshi(s.item.value)).sum minus tx3.txOut.map(_.amount).sum
 
       (data1, tx3, fee)
     }
 
     def signTransaction(tx: Transaction): Transaction = {
-      tx.copy(txIn = tx.txIn.zipWithIndex.map { case (txIn, i) =>
+      val inputs = tx.txIn.zipWithIndex.map { case (txIn, i) =>
         val utxo = utxos.find(_.outPoint == txIn.outPoint).getOrElse(throw new RuntimeException(s"cannot sign input that spends from ${txIn.outPoint}"))
         val key = utxo.key
-        val sig = Transaction.signInput(tx, i, Script.pay2pkh(key.publicKey), SIGHASH_ALL, Satoshi(utxo.item.value), SigVersion.SIGVERSION_WITNESS_V0, key.privateKey)
-        val sigScript = Script.write(OP_PUSHDATA(Script.write(Script.pay2wpkh(key.publicKey))) :: Nil)
-        val witness = ScriptWitness(sig :: key.publicKey.value :: Nil)
-        txIn.copy(signatureScript = sigScript, witness = witness)
-      })
+        val sig = Transaction.signInput(tx, i, Script.pay2pkh(key.publicKey), fr.acinq.bitcoin.SigHash.SIGHASH_ALL, new Satoshi(utxo.item.value), SigVersion.SIGVERSION_WITNESS_V0, key.privateKey)
+        val sigScript = Script.write((new OP_PUSHDATA(Script.write(Script.pay2wpkh(key.publicKey))) :: Nil))
+        val witness = new ScriptWitness((new fr.acinq.bitcoin.ByteVector(sig) :: key.publicKey.value :: Nil))
+        txIn.updateSignatureScript(sigScript).updateWitness(witness)
+      }
+      tx.updateInputs(inputs)
+      //      tx.copy(txIn = tx.txIn.zipWithIndex.map { case (txIn, i) =>
+      //        val utxo = utxos.find(_.outPoint == txIn.outPoint).getOrElse(throw new RuntimeException(s"cannot sign input that spends from ${txIn.outPoint}"))
+      //        val key = utxo.key
+      //        val sig = Transaction.signInput(tx, i, Script.pay2pkh(key.publicKey), SIGHASH_ALL, Satoshi(utxo.item.value), SigVersion.SIGVERSION_WITNESS_V0, key.privateKey)
+      //        val sigScript = Script.write(OP_PUSHDATA(Script.write(Script.pay2wpkh(key.publicKey))) :: Nil)
+      //        val witness = ScriptWitness(sig :: key.publicKey.value :: Nil)
+      //        txIn.copy(signatureScript = sigScript, witness = witness)
+      //      })
     }
 
     /**
@@ -1029,7 +1062,9 @@ object ElectrumWallet {
       // reorg-proof out of the box), we need to update the history  right away if we want to be able to build chained
       // unconfirmed transactions. A few seconds later electrum will notify us and the entry will be overwritten.
       // Note that we need to take into account both inputs and outputs, because there may be change.
-      val history1 = (tx.txIn.filter(isMine).map(extractPubKeySpentFrom).flatten.map(computeScriptHashFromPublicKey) ++ tx.txOut.filter(isMine).map(_.publicKeyScript).map(computeScriptHash))
+      val hashes = (tx.txIn.filter(isMine).flatMap(extractPubKeySpentFrom).map(computeScriptHashFromPublicKey) ++ tx.txOut.filter(isMine).map(_.publicKeyScript.toByteArray).map(computeScriptHash))
+
+      val history1 = hashes
         .foldLeft(this.history) {
           case (history, scriptHash) =>
             val entry = history.get(scriptHash) match {
@@ -1051,19 +1086,21 @@ object ElectrumWallet {
      * @return a (tx, fee) tuple, tx is a signed transaction that spends all our balance and
      *         fee is the associated bitcoin network fee
      */
-    def spendAll(publicKeyScript: ByteVector, feeRatePerKw: FeeratePerKw): (Transaction, Satoshi) = {
+    def spendAll(publicKeyScript: Array[Byte], feeRatePerKw: FeeratePerKw): (Transaction, Satoshi) = {
       // use confirmed and unconfirmed balance
-      val amount = balance._1 + balance._2
-      val tx = Transaction(version = 2, txIn = Nil, txOut = TxOut(amount, publicKeyScript) :: Nil, lockTime = 0)
+      val amount = balance._1 plus balance._2
+      val tx = new Transaction(2, Nil, new TxOut(amount, publicKeyScript) :: Nil, 0)
       // use all uxtos, including locked ones
       val tx1 = addUtxosWithDummySig(tx, utxos)
       val fee = Transactions.weight2fee(feeRatePerKw, tx1.weight())
-      val tx2 = tx1.copy(txOut = TxOut(amount - fee, publicKeyScript) :: Nil)
+      val tx2 = tx1.updateOutputs(new TxOut((amount minus fee), publicKeyScript) :: Nil)
       val tx3 = signTransaction(tx2)
       (tx3, fee)
     }
 
     def spendAll(publicKeyScript: Seq[ScriptElt], feeRatePerKw: FeeratePerKw): (Transaction, Satoshi) = spendAll(Script.write(publicKeyScript), feeRatePerKw)
+
+    def spendAll(publicKeyScript: ByteVector, feeRatePerKw: FeeratePerKw): (Transaction, Satoshi) = spendAll(publicKeyScript.toArray, feeRatePerKw)
   }
 
   object Data {

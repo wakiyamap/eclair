@@ -18,7 +18,7 @@ package fr.acinq.eclair.router
 
 import akka.actor.{ActorContext, ActorRef}
 import akka.event.{DiagnosticLoggingAdapter, LoggingAdapter}
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.PublicKey
 import fr.acinq.bitcoin.Script.{pay2wsh, write}
 import fr.acinq.eclair.blockchain.{UtxoStatus, ValidateRequest, ValidateResult, WatchSpentBasic}
 import fr.acinq.eclair.channel.{AvailableBalanceChanged, BITCOIN_FUNDING_EXTERNAL_CHANNEL_SPENT, LocalChannelDown, LocalChannelUpdate}
@@ -29,6 +29,7 @@ import fr.acinq.eclair.router.Router._
 import fr.acinq.eclair.transactions.Scripts
 import fr.acinq.eclair.wire._
 import fr.acinq.eclair.{Logs, MilliSatoshiLong, NodeParams, ShortChannelId, TxCoordinates}
+import fr.acinq.eclair.KotlinUtils._
 
 object Validation {
 
@@ -95,7 +96,7 @@ object Validation {
           val (fundingOutputScript, fundingOutputIsInvalid) = {
             // let's check that the output is indeed a P2WSH multisig 2-of-2 of nodeid1 and nodeid2)
             val fundingOutputScript = write(pay2wsh(Scripts.multiSig2of2(c.bitcoinKey1, c.bitcoinKey2)))
-            val fundingOutputIsInvalid = tx.txOut.size < outputIndex + 1 || fundingOutputScript != tx.txOut(outputIndex).publicKeyScript
+            val fundingOutputIsInvalid = tx.txOut.size < outputIndex + 1 || !tx.txOut(outputIndex).publicKeyScript.contentEquals(fundingOutputScript)
             (fundingOutputScript, fundingOutputIsInvalid)
           }
           if (fundingOutputIsInvalid) {

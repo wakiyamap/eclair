@@ -27,6 +27,8 @@ import fr.acinq.eclair.channel._
 import fr.acinq.eclair.channel.states.{StateTestsBase, StateTestsTags}
 import fr.acinq.eclair.wire.{ClosingSigned, Error, Shutdown}
 import fr.acinq.eclair.{CltvExpiry, MilliSatoshiLong, TestConstants, TestKitBaseClass}
+import fr.acinq.eclair.KotlinUtils._
+
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
 import org.scalatest.{Outcome, Tag}
 import scodec.bits.ByteVector
@@ -81,7 +83,7 @@ class NegotiatingStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike 
     import f._
     alice2bob.expectMsgType[ClosingSigned]
     val sender = TestProbe()
-    val add = CMD_ADD_HTLC(sender.ref, 5000000000L msat, ByteVector32(ByteVector.fill(32)(1)), cltvExpiry = CltvExpiry(300000), onion = TestConstants.emptyOnionPacket, localOrigin(sender.ref))
+    val add = CMD_ADD_HTLC(sender.ref, 5000000000L msat, new ByteVector32("01" * 32), cltvExpiry = CltvExpiry(300000), onion = TestConstants.emptyOnionPacket, localOrigin(sender.ref))
     alice ! add
     val error = ChannelUnavailable(channelId(alice))
     sender.expectMsg(RES_ADD_FAILED(add, error, None))
@@ -159,7 +161,7 @@ class NegotiatingStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike 
     val tx = bob.stateData.asInstanceOf[DATA_NEGOTIATING].commitments.localCommit.publishableTxs.commitTx.tx
     sender.send(bob, aliceCloseSig.copy(feeSatoshis = 99000 sat)) // sig doesn't matter, it is checked later
     val error = bob2alice.expectMsgType[Error]
-    assert(new String(error.data.toArray).startsWith("invalid close fee: fee_satoshis=Satoshi(99000)"))
+    assert(new String(error.data.toArray).startsWith("invalid close fee: fee_satoshis=99000 sat"))
     bob2blockchain.expectMsg(PublishAsap(tx))
     bob2blockchain.expectMsgType[PublishAsap]
     bob2blockchain.expectMsgType[WatchConfirmed]
