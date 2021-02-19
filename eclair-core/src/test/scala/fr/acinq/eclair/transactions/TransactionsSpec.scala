@@ -18,7 +18,7 @@ package fr.acinq.eclair.transactions
 
 import fr.acinq.bitcoin.Crypto.{ripemd160, sha256}
 import fr.acinq.bitcoin.Script.{pay2wpkh, pay2wsh, write}
-import fr.acinq.bitcoin.{Btc, ByteVector32, Crypto, MilliBtc, MilliBtcDouble, PimpSatoshi, PrivateKey, Protocol, Satoshi, SatoshiLong, Script, Transaction, TxOut}
+import fr.acinq.bitcoin.{Btc, ByteVector32, Crypto, MilliBtc, MilliBtcDouble, OutPoint, PimpSatoshi, PrivateKey, Protocol, Satoshi, SatoshiLong, Script, Transaction, TxIn, TxOut}
 import fr.acinq.bitcoin.SigHash._
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.channel.Helpers.Funding
@@ -34,7 +34,6 @@ import grizzled.slf4j.Logging
 import org.scalatest.funsuite.AnyFunSuite
 import scodec.bits._
 
-import java.nio.ByteOrder
 import scala.io.Source
 import scala.util.Random
 
@@ -56,6 +55,27 @@ class TransactionsSpec extends AnyFunSuite with Logging {
   val toLocalDelay = CltvExpiryDelta(144)
   val localDustLimit = new Satoshi(546)
   val feeratePerKw = FeeratePerKw(22000 sat)
+
+  test("extract csv and cltv timeouts") {
+    val parentTxId1 = randomBytes32
+    val parentTxId2 = randomBytes32
+    val parentTxId3 = randomBytes32
+    val txIn = Seq(
+      new TxIn(new OutPoint(parentTxId1.reversed(), 3), Nil, 3),
+      new TxIn(new OutPoint(parentTxId2.reversed(), 1), Nil, 4),
+      new TxIn(new OutPoint(parentTxId3.reversed(), 0), Nil, 5),
+      new TxIn(new OutPoint(randomBytes32, 4), Nil, 0),
+      new TxIn(new OutPoint(parentTxId1.reversed(), 2), Nil, 5),
+    )
+    val tx = new Transaction(2, txIn, Nil, 10)
+    val expected = Map(
+      parentTxId1 -> 5,
+      parentTxId2 -> 4,
+      parentTxId3 -> 5,
+    )
+    assert(expected === Scripts.csvTimeouts(tx))
+    assert(10 === Scripts.cltvTimeout(tx))
+  }
 
   test("encode/decode sequence and locktime (one example)") {
     val txnumber = 0x11F71FB268DL

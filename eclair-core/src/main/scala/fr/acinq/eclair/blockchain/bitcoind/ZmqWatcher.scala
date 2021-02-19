@@ -35,16 +35,20 @@ import org.json4s.JsonAST.{JArray, JBool, JDecimal, JInt, JString}
 import scodec.bits.ByteVector
 import fr.acinq.eclair.KotlinUtils._
 
+import scala.collection.convert.ImplicitConversions.`collection AsScalaIterable`
 import scala.collection.immutable.SortedMap
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
 /**
- * A blockchain watcher that:
- * - receives bitcoin events (new blocks and new txes) directly from the bitcoin network
- * - also uses bitcoin-core rpc api, most notably for tx confirmation count and blockcount (because reorgs)
  * Created by PM on 21/02/2016.
+ */
+
+/**
+ * A blockchain watcher that:
+ *  - receives bitcoin events (new blocks and new txs) directly from the bitcoin network
+ *  - also uses bitcoin-core rpc api, most notably for tx confirmation count and block count (because reorgs)
  */
 class ZmqWatcher(chainHash: ByteVector32, blockCount: AtomicLong, client: ExtendedBitcoinClient)(implicit ec: ExecutionContext = ExecutionContext.global) extends Actor with ActorLogging {
 
@@ -181,13 +185,15 @@ class ZmqWatcher(chainHash: ByteVector32, blockCount: AtomicLong, client: Extend
     case PublishAsap(tx) =>
       val blockCount = this.blockCount.get()
       val cltvTimeout = Scripts.cltvTimeout(tx)
-      val csvTimeout = Scripts.csvTimeout(tx)
-      if (csvTimeout > 0) {
-        require(tx.txIn.size == 1, s"watcher only supports tx with 1 input, this tx has ${tx.txIn.size} inputs")
-        val parentTxid = tx.txIn.head.outPoint.txid
-        log.info(s"txid=${tx.txid} has a relative timeout of $csvTimeout blocks, watching parenttxid=$parentTxid tx={}", tx)
-        val parentPublicKey = fr.acinq.bitcoin.Script.write(fr.acinq.bitcoin.Script.pay2wsh(tx.txIn.head.witness.last()))
-        self ! WatchConfirmed(self, parentTxid, ByteVector.view(parentPublicKey), minDepth = 1, BITCOIN_PARENT_TX_CONFIRMED(tx))
+      val csvTimeouts = Scripts.csvTimeouts(tx)
+      if (csvTimeouts.nonEmpty) {
+        // watcher supports txs with multiple csv-delayed inputs: we watch all delayed parents and try to publish every
+        // time a parent's relative delays are satisfied, so we will eventually succeed.
+        csvTimeouts.foreach { case (parentTxId, csvTimeout) =>
+          log.info(s"txid=${tx.txid} has a relative timeout of $csvTimeout blocks, watching parentTxId=$parentTxId tx={}", tx)
+          val parentPublicKeyScript = Script.write(Script.pay2wsh(tx.txIn.find(_.outPoint.txid == parentTxId).get.witness.stack.last))
+          self ! WatchConfirmed(self, parentTxId, ByteVector.view(parentPublicKeyScript), minDepth = csvTimeout, BITCOIN_PARENT_TX_CONFIRMED(tx))
+        }
       } else if (cltvTimeout > blockCount) {
         log.info(s"delaying publication of txid=${tx.txid} until block=$cltvTimeout (curblock=$blockCount)")
         val block2tx1 = block2tx.updated(cltvTimeout, block2tx.getOrElse(cltvTimeout, Seq.empty[Transaction]) :+ tx)
@@ -198,11 +204,9 @@ class ZmqWatcher(chainHash: ByteVector32, blockCount: AtomicLong, client: Extend
       log.info(s"parent tx of txid=${tx.txid} has been confirmed")
       val blockCount = this.blockCount.get()
       val cltvTimeout = Scripts.cltvTimeout(tx)
-      val csvTimeout = Scripts.csvTimeout(tx)
-      val absTimeout = math.max(blockHeight + csvTimeout, cltvTimeout)
-      if (absTimeout > blockCount) {
-        log.info(s"delaying publication of txid=${tx.txid} until block=$absTimeout (curblock=$blockCount)")
-        val block2tx1 = block2tx.updated(absTimeout, block2tx.getOrElse(absTimeout, Seq.empty[Transaction]) :+ tx)
+      if (cltvTimeout > blockCount) {
+        log.info(s"delaying publication of txid=${tx.txid} until block=$cltvTimeout (curblock=$blockCount)")
+        val block2tx1 = block2tx.updated(cltvTimeout, block2tx.getOrElse(cltvTimeout, Seq.empty[Transaction]) :+ tx)
         context become watching(watches, watchedUtxos, block2tx1, nextTick)
       } else publish(tx)
 
