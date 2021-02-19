@@ -17,14 +17,14 @@
 package fr.acinq.eclair.blockchain.electrum
 
 import akka.actor.{ActorRef, Props}
-import akka.testkit.{TestKit, TestProbe}
+import akka.testkit.TestProbe
 import com.whisk.docker.DockerReadyChecker
 import fr.acinq.bitcoin.{Block, Btc, BtcDouble, ByteVector32, DeterministicWallet, MnemonicCode, OutPoint, Satoshi, SatoshiLong, Script, ScriptFlags, ScriptWitness, SigVersion, Transaction, TxIn, TxOut}
 import fr.acinq.bitcoin.SigHash.SIGHASH_ALL
 import fr.acinq.eclair.TestKitBaseClass
-import fr.acinq.eclair.blockchain.bitcoind.BitcoinCoreWallet.{FundTransactionResponse, SignTransactionResponse}
 import fr.acinq.eclair.blockchain.bitcoind.BitcoindService.BitcoinReq
 import fr.acinq.eclair.blockchain.bitcoind.rpc.ExtendedBitcoinClient
+import fr.acinq.eclair.blockchain.bitcoind.rpc.ExtendedBitcoinClient.{FundTransactionResponse, SignTransactionResponse}
 import fr.acinq.eclair.blockchain.bitcoind.{BitcoinCoreWallet, BitcoindService}
 import fr.acinq.eclair.blockchain.electrum.ElectrumClient.{BroadcastTransaction, BroadcastTransactionResponse, SSL}
 import fr.acinq.eclair.blockchain.electrum.ElectrumClientPool.ElectrumServerAddress
@@ -67,7 +67,6 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
     logger.info("stopping bitcoind")
     stopBitcoind()
     super.afterAll()
-    TestKit.shutdownActorSystem(system)
   }
 
   def getCurrentAddress(probe: TestProbe) = {
@@ -81,14 +80,7 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
   }
 
   test("generate 150 blocks") {
-    val sender = TestProbe()
-    logger.info(s"waiting for bitcoind to initialize...")
-    awaitCond({
-      sender.send(bitcoincli, BitcoinReq("getnetworkinfo"))
-      sender.receiveOne(5 second).isInstanceOf[JValue]
-    }, max = 30 seconds, interval = 500 millis)
-    logger.info(s"generating initial blocks...")
-    generateBlocks(bitcoincli, 150, timeout = 30 seconds)
+    waitForBitcoindReady()
     DockerReadyChecker.LogLineContains("INFO:BlockProcessor:height: 151").looped(attempts = 15, delay = 1 second)
   }
 
@@ -122,7 +114,7 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
     }, max = 30 seconds, interval = 1 second)
 
     // confirm our tx
-    generateBlocks(bitcoincli, 1)
+    generateBlocks(1)
     awaitCond({
       val GetBalanceResponse(confirmed1, _) = getBalance(probe)
       confirmed1 == (confirmed plus 100000000.sat)
@@ -136,7 +128,7 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
     logger.info(s"sending 0.5 btc to $address1")
     probe.send(bitcoincli, BitcoinReq("sendtoaddress", address1, 0.5))
     probe.expectMsgType[JValue]
-    generateBlocks(bitcoincli, 1)
+    generateBlocks(1)
 
     awaitCond({
       val GetBalanceResponse(confirmed1, _) = getBalance(probe)
@@ -161,7 +153,7 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
     val btcWallet = new BitcoinCoreWallet(bitcoinrpcclient)
     val btcClient = new ExtendedBitcoinClient(bitcoinrpcclient)
     val future = for {
-      FundTransactionResponse(tx1, _, _) <- btcWallet.fundTransaction(tx, lockUnspents = false, FeeratePerKw(10000 sat))
+      FundTransactionResponse(tx1, _, _) <- btcWallet.fundTransaction(tx, lockUtxos = false, FeeratePerKw(10000 sat))
       SignTransactionResponse(tx2, true) <- btcWallet.signTransaction(tx1)
       txid <- btcClient.publishTransaction(tx2)
     } yield txid
@@ -172,7 +164,7 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
       unconfirmed1 == (unconfirmed plus amount plus amount)
     }, max = 30 seconds, interval = 1 second)
 
-    generateBlocks(bitcoincli, 1)
+    generateBlocks(1)
     awaitCond({
       val GetBalanceResponse(confirmed1, _) = getBalance(probe)
       confirmed1 == (confirmed plus amount plus amount)
@@ -202,7 +194,7 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
     assert(received === 100000000.sat)
 
     logger.info("generating a new block")
-    generateBlocks(bitcoincli, 1)
+    generateBlocks(1)
     awaitCond({
       val GetBalanceResponse(confirmed1, _) = getBalance(probe)
       (confirmed1 minus confirmed) === 100000000.sat
@@ -233,7 +225,7 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
     probe.send(wallet, BroadcastTransaction(tx1))
     val BroadcastTransactionResponse(_, None) = probe.expectMsgType[BroadcastTransactionResponse]
 
-    generateBlocks(bitcoincli, 1)
+    generateBlocks(1)
 
     awaitCond({
       probe.send(bitcoincli, BitcoinReq("getreceivedbyaddress", address))
@@ -265,7 +257,7 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
     probe.send(wallet, BroadcastTransaction(tx1))
     val BroadcastTransactionResponse(_, None) = probe.expectMsgType[BroadcastTransactionResponse]
 
-    generateBlocks(bitcoincli, 1)
+    generateBlocks(1)
 
     awaitCond({
       val GetBalanceResponse(confirmed1, _) = getBalance(probe)
@@ -322,7 +314,7 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
     probe.send(wallet, IsDoubleSpent(tx2))
     probe.expectMsg(IsDoubleSpentResponse(tx2, isDoubleSpent = false))
 
-    generateBlocks(bitcoincli, 2)
+    generateBlocks(2)
 
     awaitCond({
       probe.send(wallet, GetData)
@@ -347,7 +339,7 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
     probe.send(wallet, BroadcastTransaction(tx))
     val BroadcastTransactionResponse(`tx`, None) = probe.expectMsgType[BroadcastTransactionResponse]
 
-    generateBlocks(bitcoincli, 1)
+    generateBlocks(1)
 
     awaitCond({
       probe.send(wallet, GetData)
@@ -364,7 +356,7 @@ class ElectrumWalletSpec extends TestKitBaseClass with AnyFunSuiteLike with Bitc
     probe.send(wallet, BroadcastTransaction(tx1))
     val BroadcastTransactionResponse(`tx1`, None) = probe.expectMsgType[BroadcastTransactionResponse]
 
-    generateBlocks(bitcoincli, 1)
+    generateBlocks(1)
 
     awaitCond({
       probe.send(wallet, GetData)

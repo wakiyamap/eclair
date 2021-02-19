@@ -50,37 +50,6 @@ class WatcherSpec extends AnyFunSuiteLike {
 object WatcherSpec {
 
   /**
-   * Create a new address and dumps its private key.
-   */
-  def getNewAddress(bitcoincli: ActorRef)(implicit system: ActorSystem): (String, PrivateKey) = {
-    val probe = TestProbe()
-    probe.send(bitcoincli, BitcoinReq("getnewaddress"))
-    val JString(address) = probe.expectMsgType[JValue]
-
-    probe.send(bitcoincli, BitcoinReq("dumpprivkey", address))
-    val JString(wif) = probe.expectMsgType[JValue]
-    val pair = PrivateKey.fromBase58(wif, Base58.Prefix.SecretKeyTestnet)
-    val priv = pair.getFirst
-    assert(pair.getSecond)
-    (address, priv)
-  }
-
-  /**
-   * Send to a given address, without generating blocks to confirm.
-   *
-   * @return the corresponding transaction.
-   */
-  def sendToAddress(bitcoincli: ActorRef, address: String, amount: Double)(implicit system: ActorSystem): Transaction = {
-    val probe = TestProbe()
-    probe.send(bitcoincli, BitcoinReq("sendtoaddress", address, amount))
-    val JString(txid) = probe.expectMsgType[JValue]
-
-    probe.send(bitcoincli, BitcoinReq("getrawtransaction", txid))
-    val JString(hex) = probe.expectMsgType[JValue]
-    Transaction.read(hex)
-  }
-
-  /**
    * Create a transaction that spends a p2wpkh output from an input transaction and sends it to the same address.
    *
    * @param tx   tx that sends funds to a p2wpkh of priv

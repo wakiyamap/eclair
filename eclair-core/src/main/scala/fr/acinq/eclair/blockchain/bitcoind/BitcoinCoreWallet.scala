@@ -19,7 +19,8 @@ package fr.acinq.eclair.blockchain.bitcoind
 import fr.acinq.bitcoin.PublicKey
 import fr.acinq.bitcoin._
 import fr.acinq.eclair.blockchain._
-import fr.acinq.eclair.blockchain.bitcoind.rpc.{BitcoinJsonRPCClient, Error, ExtendedBitcoinClient, JsonRPCError}
+import fr.acinq.eclair.blockchain.bitcoind.rpc.ExtendedBitcoinClient.{FundTransactionOptions, FundTransactionResponse, SignTransactionResponse, toSatoshi}
+import fr.acinq.eclair.blockchain.bitcoind.rpc.{BitcoinJsonRPCClient, ExtendedBitcoinClient, JsonRPCError}
 import fr.acinq.eclair.blockchain.fee.{FeeratePerKB, FeeratePerKw}
 import fr.acinq.eclair.transactions.Transactions
 import grizzled.slf4j.Logging
@@ -41,10 +42,8 @@ class BitcoinCoreWallet(rpcClient: BitcoinJsonRPCClient)(implicit ec: ExecutionC
 
   val bitcoinClient = new ExtendedBitcoinClient(rpcClient)
 
-  def fundTransaction(tx: Transaction, lockUnspents: Boolean, feeRatePerKw: FeeratePerKw): Future[FundTransactionResponse] = fundTransaction(Hex.encode(Transaction.write(tx)), lockUnspents, feeRatePerKw)
-
-  private def fundTransaction(hex: String, lockUnspents: Boolean, feeRatePerKw: FeeratePerKw): Future[FundTransactionResponse] = {
-    val requestedFeeRatePerKB = FeeratePerKB(feeRatePerKw)
+  def fundTransaction(tx: Transaction, lockUtxos: Boolean, feerate: FeeratePerKw): Future[FundTransactionResponse] = {
+    val requestedFeeRatePerKB = FeeratePerKB(feerate)
     rpcClient.invoke("getmempoolinfo").map(json => json \ "mempoolminfee" match {
       case JDecimal(feerate) => FeeratePerKB(Btc(feerate).toSatoshi).max(requestedFeeRatePerKB)
       case JInt(feerate) => FeeratePerKB(Btc(feerate.toLong).toSatoshi).max(requestedFeeRatePerKB)
@@ -52,27 +51,13 @@ class BitcoinCoreWallet(rpcClient: BitcoinJsonRPCClient)(implicit ec: ExecutionC
         logger.warn(s"cannot retrieve mempool minimum fee: $other")
         requestedFeeRatePerKB
     }).flatMap(feeRatePerKB => {
-      rpcClient.invoke("fundrawtransaction", hex, Options(lockUnspents, feeRatePerKB.toLong.bigDecimal.scaleByPowerOfTen(-8))).map(json => {
-        val JString(hex) = json \ "hex"
-        val JInt(changepos) = json \ "changepos"
-        val JDecimal(fee) = json \ "fee"
-        FundTransactionResponse(Transaction.read(hex), changepos.intValue, toSatoshi(fee))
-      })
+      bitcoinClient.fundTransaction(tx, FundTransactionOptions(FeeratePerKw(feeRatePerKB), lockUtxos = lockUtxos))
     })
   }
 
-  def signTransaction(tx: Transaction): Future[SignTransactionResponse] = signTransaction(Hex.encode(Transaction.write(tx)))
-
-  private def signTransaction(hex: String): Future[SignTransactionResponse] =
-    rpcClient.invoke("signrawtransactionwithwallet", hex).map(json => {
-      val JString(hex) = json \ "hex"
-      val JBool(complete) = json \ "complete"
-      if (!complete) {
-        val message = (json \ "errors" \\ classOf[JString]).mkString(",")
-        throw JsonRPCError(Error(-1, message))
-      }
-      SignTransactionResponse(Transaction.read(hex), complete)
-    })
+  def signTransaction(tx: Transaction): Future[SignTransactionResponse] = {
+    bitcoinClient.signTransaction(tx, Nil)
+  }
 
   private def signTransactionOrUnlock(tx: Transaction): Future[SignTransactionResponse] = {
     val f = signTransaction(tx)
@@ -139,7 +124,7 @@ class BitcoinCoreWallet(rpcClient: BitcoinJsonRPCClient)(implicit ec: ExecutionC
     JString(rawKey) <- rpcClient.invoke("getaddressinfo", address).map(_ \ "pubkey")
   } yield new PublicKey(ByteVector.fromValidHex(rawKey))
 
-  override def makeFundingTx(pubkeyScript: ByteVector, amount: Satoshi, feeRatePerKw: FeeratePerKw): Future[MakeFundingTxResponse] = {
+  override def makeFundingTx(pubkeyScript: ByteVector, amount: Satoshi, feerate: FeeratePerKw): Future[MakeFundingTxResponse] = {
     val partialFundingTx = new Transaction(
       2,
       Seq.empty[TxIn],
@@ -147,16 +132,16 @@ class BitcoinCoreWallet(rpcClient: BitcoinJsonRPCClient)(implicit ec: ExecutionC
       0)
     for {
       // we ask bitcoin core to add inputs to the funding tx, and use the specified change address
-      FundTransactionResponse(unsignedFundingTx, _, fee) <- fundTransaction(partialFundingTx, lockUnspents = true, feeRatePerKw)
+      fundTxResponse <- fundTransaction(partialFundingTx, lockUtxos = true, feerate)
       // now let's sign the funding tx
-      SignTransactionResponse(fundingTx, true) <- signTransactionOrUnlock(unsignedFundingTx)
+      SignTransactionResponse(fundingTx, true) <- signTransactionOrUnlock(fundTxResponse.tx)
       // there will probably be a change output, so we need to find which output is ours
       outputIndex <- Transactions.findPubKeyScriptIndex(fundingTx, pubkeyScript, amount_opt = None) match {
         case Right(outputIndex) => Future.successful(outputIndex)
         case Left(skipped) => Future.failed(new RuntimeException(skipped.toString))
       }
-      _ = logger.debug(s"created funding txid=${fundingTx.txid} outputIndex=$outputIndex fee=$fee")
-    } yield MakeFundingTxResponse(fundingTx, outputIndex, fee)
+      _ = logger.debug(s"created funding txid=${fundingTx.txid} outputIndex=$outputIndex fee=${fundTxResponse.fee}")
+    } yield MakeFundingTxResponse(fundingTx, outputIndex, fundTxResponse.fee)
   }
 
   override def commit(tx: Transaction): Future[Boolean] = bitcoinClient.publishTransaction(tx).transformWith {
@@ -202,13 +187,8 @@ class BitcoinCoreWallet(rpcClient: BitcoinJsonRPCClient)(implicit ec: ExecutionC
 object BitcoinCoreWallet {
 
   // @formatter:off
-  case class Options(lockUnspents: Boolean, feeRate: BigDecimal)
   case class Utxo(txid: ByteVector32, vout: Long)
   case class WalletTransaction(address: String, amount: Satoshi, fees: Satoshi, blockHash: ByteVector32, confirmations: Long, txid: ByteVector32, timestamp: Long)
-  case class FundTransactionResponse(tx: Transaction, changepos: Int, fee: Satoshi)
-  case class SignTransactionResponse(tx: Transaction, complete: Boolean)
   // @formatter:on
-
-  private def toSatoshi(amount: BigDecimal): Satoshi = new Satoshi(amount.bigDecimal.scaleByPowerOfTen(8).longValue)
 
 }
