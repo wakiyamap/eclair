@@ -18,7 +18,7 @@ package fr.acinq.eclair.transactions
 
 import fr.acinq.bitcoin.Crypto.{ripemd160, sha256}
 import fr.acinq.bitcoin.Script.{pay2wpkh, pay2wsh, write}
-import fr.acinq.bitcoin.{Btc, ByteVector32, Crypto, MilliBtc, MilliBtcDouble, OutPoint, PimpSatoshi, PrivateKey, Protocol, Satoshi, SatoshiLong, Script, Transaction, TxIn, TxOut}
+import fr.acinq.bitcoin.{Btc, ByteVector32, Crypto, MilliBtc, MilliBtcDouble, OutPoint, PimpSatoshi, PrivateKey, Protocol, Satoshi, SatoshiLong, Script, ScriptWitness, Transaction, TxIn, TxOut}
 import fr.acinq.bitcoin.SigHash._
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.channel.Helpers.Funding
@@ -200,10 +200,17 @@ class TransactionsSpec extends AnyFunSuite with Logging {
       val pubKeyScript = write(pay2wsh(anchor(localFundingPriv.publicKey)))
       val commitTx = new Transaction(0, Nil, new TxOut(anchorAmount, pubKeyScript) :: Nil, 0)
       val Right(claimAnchorOutputTx) = makeClaimAnchorOutputTx(commitTx, localFundingPriv.publicKey)
+      assert(claimAnchorOutputTx.tx.txOut.isEmpty)
+      // we will always add at least one input and one output to be able to set our desired feerate
       // we use dummy signatures to compute the weight
-      val weight = Transaction.weight(addSigs(claimAnchorOutputTx, PlaceHolderSig).tx)
-      assert(claimAnchorOutputWeight == weight)
-      assert(claimAnchorOutputTx.fee >= claimAnchorOutputTx.minRelayFee)
+      val p2wpkhWitness = new ScriptWitness().push(Scripts.der(PlaceHolderSig)).push(PlaceHolderPubKey.value)
+      val claimAnchorOutputTxWithFees = claimAnchorOutputTx.copy(tx = claimAnchorOutputTx.tx
+        .updateInputs(claimAnchorOutputTx.tx.txIn :+ new TxIn(new OutPoint(randomBytes32, 3), 0).updateWitness(p2wpkhWitness))
+        .updateOutputs(Seq(new TxOut(1500 sat, Script.pay2wpkh(randomKey.publicKey))))
+      )
+      val weight = Transaction.weight(addSigs(claimAnchorOutputTxWithFees, PlaceHolderSig).tx)
+      assert(weight === 717)
+      assert(weight >= claimAnchorOutputMinWeight)
     }
   }
 
