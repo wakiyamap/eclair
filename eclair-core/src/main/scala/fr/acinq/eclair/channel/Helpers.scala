@@ -1031,7 +1031,7 @@ object Helpers {
     def overriddenOutgoingHtlcs(d: DATA_CLOSING, tx: Transaction)(implicit log: LoggingAdapter): Set[UpdateAddHtlc] = {
       val localCommit = d.commitments.localCommit
       val remoteCommit = d.commitments.remoteCommit
-      val nextRemoteCommit_opt = d.commitments.remoteNextCommitInfo.left.toOption.map(_.nextRemoteCommit)
+      val nextRemoteCommit_opt = d.commitments.remoteNextCommitInfo.swap.map(_.nextRemoteCommit).toOption
       if (localCommit.publishableTxs.commitTx.tx.txid == tx.txid) {
         // our commit got confirmed, so any htlc that is in their commitment but not in ours will never reach the chain
         val htlcsInRemoteCommit = remoteCommit.spec.htlcs ++ nextRemoteCommit_opt.map(_.spec.htlcs).getOrElse(Set.empty)

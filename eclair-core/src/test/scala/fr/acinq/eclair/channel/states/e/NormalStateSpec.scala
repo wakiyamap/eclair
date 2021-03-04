@@ -685,7 +685,7 @@ class NormalStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with 
     alice ! CMD_SIGN()
     alice2bob.expectMsgType[CommitSig]
     awaitCond(alice.stateData.asInstanceOf[DATA_NORMAL].commitments.remoteNextCommitInfo.isLeft)
-    val waitForRevocation = alice.stateData.asInstanceOf[DATA_NORMAL].commitments.remoteNextCommitInfo.left.toOption.get
+    val waitForRevocation = alice.stateData.asInstanceOf[DATA_NORMAL].commitments.remoteNextCommitInfo.swap.getOrElse(???)
     assert(waitForRevocation.reSignAsap === false)
 
     // actual test starts here
@@ -702,7 +702,7 @@ class NormalStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with 
     alice ! CMD_SIGN()
     alice2bob.expectMsgType[CommitSig]
     awaitCond(alice.stateData.asInstanceOf[DATA_NORMAL].commitments.remoteNextCommitInfo.isLeft)
-    val waitForRevocation = alice.stateData.asInstanceOf[DATA_NORMAL].commitments.remoteNextCommitInfo.left.toOption.get
+    val waitForRevocation = alice.stateData.asInstanceOf[DATA_NORMAL].commitments.remoteNextCommitInfo.swap.getOrElse(???)
     assert(waitForRevocation.reSignAsap === false)
 
     // actual test starts here
@@ -1009,7 +1009,7 @@ class NormalStateSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with 
     addHtlc(50000000 msat, alice, bob, alice2bob, bob2alice)
     alice ! CMD_SIGN()
     sender.expectNoMsg(300 millis)
-    assert(alice.stateData.asInstanceOf[DATA_NORMAL].commitments.remoteNextCommitInfo.left.toOption.get.reSignAsap === true)
+    assert(alice.stateData.asInstanceOf[DATA_NORMAL].commitments.remoteNextCommitInfo.swap.getOrElse(???).reSignAsap === true)
 
     // actual test starts here
     bob2alice.expectMsgType[RevokeAndAck]

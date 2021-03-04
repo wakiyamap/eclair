@@ -152,7 +152,7 @@ case class Commitments(channelVersion: ChannelVersion,
    *   - sometimes we may want to ignore it because the previous commitment is not revoked yet
    *   - sometimes we may want to take both remote commitments into account
    */
-  val latestRemoteCommit: RemoteCommit = remoteNextCommitInfo.left.toOption.map(_.nextRemoteCommit).getOrElse(remoteCommit)
+  val latestRemoteCommit: RemoteCommit = remoteNextCommitInfo.swap.map(_.nextRemoteCommit).getOrElse(remoteCommit)
 
   val commitmentFormat: CommitmentFormat = channelVersion.commitmentFormat
 
@@ -781,10 +781,10 @@ object Commitments {
        |  htlcs:
        |${commitments.remoteCommit.spec.htlcs.map(h => s"    ${h.direction} ${h.add.id} ${h.add.cltvExpiry}").mkString("\n")}
        |next remotecommit:
-       |  toLocal: ${commitments.remoteNextCommitInfo.left.toOption.map(_.nextRemoteCommit.spec.toLocal).getOrElse("N/A")}
-       |  toRemote: ${commitments.remoteNextCommitInfo.left.toOption.map(_.nextRemoteCommit.spec.toRemote).getOrElse("N/A")}
+       |  toLocal: ${commitments.remoteNextCommitInfo.swap.map(_.nextRemoteCommit.spec.toLocal).getOrElse("N/A")}
+       |  toRemote: ${commitments.remoteNextCommitInfo.swap.map(_.nextRemoteCommit.spec.toRemote).getOrElse("N/A")}
        |  htlcs:
-       |${commitments.remoteNextCommitInfo.left.toOption.map(_.nextRemoteCommit.spec.htlcs.map(h => s"    ${h.direction} ${h.add.id} ${h.add.cltvExpiry}").mkString("\n")).getOrElse("N/A")}""".stripMargin
+       |${commitments.remoteNextCommitInfo.swap.map(_.nextRemoteCommit.spec.htlcs.map(h => s"    ${h.direction} ${h.add.id} ${h.add.cltvExpiry}").mkString("\n")).getOrElse("N/A")}""".stripMargin
   }
 
 }
