@@ -95,6 +95,7 @@ class SqliteAuditDb(sqlite: Connection) extends AuditDb with Logging {
         statement.executeUpdate("CREATE TABLE IF NOT EXISTS network_fees (channel_id BLOB NOT NULL, node_id BLOB NOT NULL, tx_id BLOB NOT NULL, fee_sat INTEGER NOT NULL, tx_type TEXT NOT NULL, timestamp INTEGER NOT NULL)")
         statement.executeUpdate("CREATE TABLE IF NOT EXISTS channel_events (channel_id BLOB NOT NULL, node_id BLOB NOT NULL, capacity_sat INTEGER NOT NULL, is_funder BOOLEAN NOT NULL, is_private BOOLEAN NOT NULL, event TEXT NOT NULL, timestamp INTEGER NOT NULL)")
         statement.executeUpdate("CREATE TABLE IF NOT EXISTS channel_errors (channel_id BLOB NOT NULL, node_id BLOB NOT NULL, error_name TEXT NOT NULL, error_message TEXT NOT NULL, is_fatal INTEGER NOT NULL, timestamp INTEGER NOT NULL)")
+        statement.executeUpdate("CREATE TABLE IF NOT EXISTS channel_meta (channel_id BLOB NOT NULL PRIMARY KEY, created_timestamp INTEGER, last_payment_sent_timestamp INTEGER, last_payment_received_timestamp INTEGER, last_connected_timestamp INTEGER, closed_timestamp INTEGER)")
 
         statement.executeUpdate("CREATE INDEX IF NOT EXISTS sent_timestamp_idx ON sent(timestamp)")
         statement.executeUpdate("CREATE INDEX IF NOT EXISTS received_timestamp_idx ON received(timestamp)")
@@ -114,7 +115,7 @@ class SqliteAuditDb(sqlite: Connection) extends AuditDb with Logging {
       statement.setLong(3, e.capacity.toLong)
       statement.setBoolean(4, e.isFunder)
       statement.setBoolean(5, e.isPrivate)
-      statement.setString(6, e.event)
+      statement.setString(6, e.event.label)
       statement.setLong(7, System.currentTimeMillis)
       statement.executeUpdate()
     }
@@ -343,6 +344,33 @@ class SqliteAuditDb(sqlite: Connection) extends AuditDb with Logging {
         }
       }
     })
+  }
+
+  private def updateChannelMetaTimestampColumn(channelId: ByteVector32, columnName: String): Unit = {
+    using(sqlite.prepareStatement(s"INSERT INTO channel_meta(channel_id, $columnName) VALUES (?, ?)")) { statement =>
+      statement.setBytes(1, channelId.toArray)
+      statement.setLong(2, System.currentTimeMillis)
+      statement.executeUpdate()
+    }
+  }
+
+  override def updateChannelMeta(channelId: ByteVector32, event: ChannelLifecycleEvent.EventType): Unit = {
+    val timestampColumn_opt = event match {
+      case ChannelLifecycleEvent.EventType.Created => Some("created_timestamp")
+      case ChannelLifecycleEvent.EventType.Connected => Some("last_connected_timestamp")
+      case _: ChannelLifecycleEvent.EventType.Closed => Some("closed_timestamp")
+      case _ => None
+    }
+    timestampColumn_opt.foreach(updateChannelMetaTimestampColumn(channelId, _))
+  }
+
+  override def updateChannelMeta(channelId: ByteVector32, event: PaymentEvent): Unit = {
+    val timestampColumn_opt = event match {
+      case _: PaymentSent => Some("last_payment_sent_timestamp")
+      case _: PaymentReceived => Some("last_payment_received_timestamp")
+      case _ => None
+    }
+    timestampColumn_opt.foreach(updateChannelMetaTimestampColumn(channelId, _))
   }
 
   // used by mobile apps

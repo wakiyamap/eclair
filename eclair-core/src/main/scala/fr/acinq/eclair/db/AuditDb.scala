@@ -17,11 +17,11 @@
 package fr.acinq.eclair.db
 
 import java.io.Closeable
-
 import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.bitcoin.{ByteVector32, Satoshi}
+import fr.acinq.eclair.channel.Helpers.Closing._
 import fr.acinq.eclair.channel._
-import fr.acinq.eclair.payment.{PaymentReceived, PaymentRelayed, PaymentSent}
+import fr.acinq.eclair.payment.{PaymentEvent, PaymentReceived, PaymentRelayed, PaymentSent}
 
 trait AuditDb extends Closeable {
 
@@ -47,9 +47,31 @@ trait AuditDb extends Closeable {
 
   def stats(from: Long, to: Long): Seq[Stats]
 
+  def updateChannelMeta(channelId: ByteVector32, event: ChannelLifecycleEvent.EventType)
+
+  def updateChannelMeta(channelId: ByteVector32, event: PaymentEvent)
 }
 
-case class ChannelLifecycleEvent(channelId: ByteVector32, remoteNodeId: PublicKey, capacity: Satoshi, isFunder: Boolean, isPrivate: Boolean, event: String)
+// @formatter:off
+case class ChannelLifecycleEvent(channelId: ByteVector32, remoteNodeId: PublicKey, capacity: Satoshi, isFunder: Boolean, isPrivate: Boolean, event: ChannelLifecycleEvent.EventType)
+object ChannelLifecycleEvent {
+  sealed trait EventType { def label: String }
+  object EventType {
+    object Created extends EventType { override def label: String = "created" }
+    object Connected extends EventType { override def label: String = "connected" }
+    case class Closed(closingType: ClosingType) extends EventType {
+      override def label: String = closingType match {
+        case _: MutualClose => "mutual"
+        case _: LocalClose => "local"
+        case _: CurrentRemoteClose => "remote"
+        case _: NextRemoteClose => "remote"
+        case _: RecoveryClose => "recovery"
+        case _: RevokedClose => "revoked"
+      }
+    }
+  }
+}
+// @formatter:on
 
 case class NetworkFee(remoteNodeId: PublicKey, channelId: ByteVector32, txId: ByteVector32, fee: Satoshi, txType: String, timestamp: Long)
 
